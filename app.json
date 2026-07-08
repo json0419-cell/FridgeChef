@@ -1,17 +1,32 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "FridgeChef",
+    "slug": "fridgechef",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.chishenme.fridgechef",
+      "buildNumber": "1",
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FridgeChef uses the camera to recognize ingredients from fridge photos.",
+        "NSPhotoLibraryUsageDescription": "FridgeChef uses selected photos to recognize ingredients.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.chishenme.fridgechef",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFF8E8",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +35,25 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "允许吃什么拍摄冰箱照片以识别食材。",
+          "photosPermission": "允许吃什么选择冰箱照片以识别食材。",
+          "microphonePermission": false
+        }
+      ],
+      "expo-asset",
+      "onnxruntime-react-native"
+    ]
   }
 }

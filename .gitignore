@@ -1,41 +1,127 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+﻿# FridgeChef mobile app
 
-# dependencies
+# Dependencies
 node_modules/
+.pnp/
+.pnp.js
 
-# Expo
+# Expo / Metro
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
 .metro-health-check*
+.expo-dev-client/
 
-# debug
+# Local logs
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.*
+expo-start.log
 
-# macOS
-.DS_Store
+# Environment and secrets
+.env
+.env.*
+!.env.example
 *.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+android/key.properties
+android/app/google-services.json
+android/app/src/*/google-services.json
+ios/GoogleService-Info.plist
 
-# local env files
-.env*.local
-
-# typescript
+# TypeScript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.iml
+*.swp
+*.swo
+.claude/
+
+# Android local files
+android/local.properties
+android/.gradle/
+android/.kotlin/
+android/.idea/
+android/captures/
+
+# Android build artifacts
+android/build/
+android/app/build/
+android/app/.cxx/
+android/app/.externalNativeBuild/
+android/app/release/
+android/app/debug/
+android/**/build/
+android/**/*.apk
+android/**/*.aab
+android/**/*.ap_
+android/**/*.dex
+android/**/*.hprof
+
+# iOS build artifacts, if iOS is generated later
+ios/Pods/
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Native generated patch backups
+*.orig
+*.orig.*
+*.rej
+
+# Local SQLite / device exports
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+
+# Generated recipe / RAG artifacts
+# Keep source code and small docs, ignore generated datasets and model/vector binaries.
+data/rag*/
+data/packs/
+data/downloads/
+data/**/*.jsonl
+data/**/*.f32
+data/**/*.bin
+data/**/*.onnx
+data/**/*.ort
+data/**/*.npy
+data/**/*.npz
+data/**/*.parquet
+data/**/*.sqlite
+data/**/*.db
+!data/README.md
+
+# Local model and vector-store downloads
+src/rag/model/**/*.onnx
+src/rag/model/**/*.ort
+src/rag/model/**/*.bin
+src/rag/vectorStore/**/*.f32
+src/rag/vectorStore/**/*.bin
+src/rag/metadata/**/*.jsonl
+
+# Temporary files
+.tmp/
+tmp/
+temp/
+.cache/
+coverage/
