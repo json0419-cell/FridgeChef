@@ -65,19 +65,23 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.primary,
-    elevation: 4,
+    elevation: 3,
+    shadowColor: '#17472F',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
   },
   secondary: {
-    backgroundColor: 'rgba(255, 253, 248, 0.82)',
+    backgroundColor: 'rgba(255, 253, 248, 0.9)',
     borderColor: colors.border,
     borderWidth: 1,
   },
   danger: {
     backgroundColor: colors.danger,
-    elevation: 3,
+    elevation: 2,
   },
   button: {
-    minHeight: 50,
+    minHeight: 52,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
@@ -95,10 +99,10 @@ const styles = StyleSheet.create({
   },
   text: {
     color: colors.textInverse,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   secondaryText: {
     color: colors.primary,

@@ -54,6 +54,11 @@
       ],
       "expo-asset",
       "onnxruntime-react-native"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ab8c5412-c975-470a-a3e0-fd4cf442a9ef"
+      }
+    }
   }
 }

@@ -1,16 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { Clock, SlidersHorizontal } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteCookedHistory, listCookedHistory } from '../db/cookedHistoryRepository';
 import { useI18n } from '../i18n/i18n';
-import { colors, radii, shadows, spacing, typography } from '../styles/theme';
-import type { CookedRecipeHistory, RootStackParamList } from '../types';
+import { colors, spacing, typography } from '../styles/theme';
+import type { CookedRecipeHistory, HistoryStackScreenProps } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
+type Props = HistoryStackScreenProps<'History'>;
 type TFunction = ReturnType<typeof useI18n>['t'];
+type ActionButtonVariant = 'primary' | 'secondary';
 
 type TimelineItem =
   | { kind: 'date'; id: string; label: string }
@@ -20,6 +20,16 @@ export function HistoryScreen({ navigation }: Props) {
   const { language, t } = useI18n();
   const [history, setHistory] = useState<CookedRecipeHistory[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity accessibilityLabel={t('nav.settings')} accessibilityRole="button" onPress={() => navigation.navigate('Settings')} style={styles.headerSettingsButton}>
+          <SlidersHorizontal size={20} color="#6B6B6B" strokeWidth={2} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, t]);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -53,24 +63,19 @@ export function HistoryScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.screen}>
       <FlatList
         data={timelineItems}
         keyExtractor={(item) => item.id}
         refreshing={loading}
         onRefresh={loadHistory}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.title}>{t('history.title')}</Text>
-            <PrimaryButton title={t('history.goRecommendations')} variant="secondary" onPress={() => navigation.navigate('Recommendations')} />
-          </View>
-        }
+        contentContainerStyle={[styles.content, timelineItems.length === 0 && styles.emptyContent]}
         ListEmptyComponent={
-          <View style={styles.empty}>
+          <View style={styles.emptyState}>
+            <Clock size={48} color="#E5E5E5" strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
-            <Text style={styles.emptyText}>{t('history.emptyText')}</Text>
-            <PrimaryButton title={t('history.goPage')} onPress={() => navigation.navigate('Recommendations')} />
+            <Text style={styles.emptyText}>{emptyHistoryText(language)}</Text>
+            <ActionButton title={t('history.goPage')} onPress={() => navigation.navigate('HomeStack', { screen: 'Recommendations', initial: false })} />
           </View>
         }
         renderItem={({ item }) =>
@@ -81,27 +86,49 @@ export function HistoryScreen({ navigation }: Props) {
             </View>
           ) : (
             <View style={styles.historyRow}>
-              <View style={styles.timelineRail}>
-                <View style={styles.timelineDot} />
+              <View style={styles.cardTitleBox}>
+                <Text style={styles.recipeTitle} numberOfLines={1}>{item.item.title}</Text>
+                <Text style={styles.meta}>
+                  {formatTime(item.item.cookedAt, language)} · {sourceLabel(item.item.source, t)}
+                </Text>
               </View>
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleBox}>
-                    <Text style={styles.recipeTitle}>{item.item.title}</Text>
-                    <Text style={styles.meta}>
-                      {formatTime(item.item.cookedAt, language)} · {sourceLabel(item.item.source, t)}
-                    </Text>
-                  </View>
-                  <Pressable accessibilityRole="button" style={styles.deleteButton} onPress={() => removeItem(item.item)}>
-                    <Text style={styles.deleteText}>{t('common.delete')}</Text>
-                  </Pressable>
-                </View>
-              </View>
+              <Pressable accessibilityRole="button" style={styles.deleteButton} onPress={() => removeItem(item.item)}>
+                <Text style={styles.deleteText}>{t('common.delete')}</Text>
+              </Pressable>
             </View>
           )
         }
       />
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const secondary = variant === 'secondary';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.solidButton,
+        secondary ? styles.solidButtonSecondary : styles.solidButtonPrimary,
+        pressed && styles.solidButtonPressed,
+        style,
+      ]}
+    >
+      <Text style={[styles.solidButtonText, secondary && styles.solidButtonTextSecondary]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -190,45 +217,78 @@ function sourceLabel(value: CookedRecipeHistory['source'], t: TFunction) {
   return t('history.sourceStructured');
 }
 
+function emptyHistoryText(language: string) {
+  return language === 'en' ? 'Cook a recommendation to see it here.' : '烹饪一次推荐后会显示在这里。';
+}
+
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 24,
+    paddingBottom: 40,
     gap: spacing.lg,
   },
-  header: {
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    ...shadows.card,
+  emptyContent: {
+    flexGrow: 1,
   },
-  title: {
-    color: colors.text,
-    fontSize: 34,
-    fontWeight: '900',
-    fontFamily: typography.display,
+  headerSettingsButton: {
+    padding: 12,
+    marginRight: -12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  empty: {
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  solidButton: {
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  solidButtonPrimary: {
+    backgroundColor: '#1B4332',
+  },
+  solidButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    ...shadows.card,
+  },
+  solidButtonPressed: {
+    opacity: 0.88,
+  },
+  solidButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: typography.strong,
+  },
+  solidButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginTop: 80,
   },
   emptyTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-    fontFamily: typography.display,
+    color: '#1A1A1A',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginTop: 16,
+    textAlign: 'center',
   },
   emptyText: {
-    color: colors.muted,
-    lineHeight: 22,
+    color: '#6B6B6B',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   dateRow: {
     flexDirection: 'row',
@@ -244,54 +304,34 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-    fontFamily: typography.display,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: typography.strong,
   },
   historyRow: {
+    minHeight: 56,
     flexDirection: 'row',
-    gap: spacing.md,
-  },
-  timelineRail: {
-    width: 14,
     alignItems: 'center',
-  },
-  timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginTop: spacing.lg,
-  },
-  card: {
-    flex: 1,
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    paddingVertical: 10,
   },
   cardTitleBox: {
     flex: 1,
-    gap: spacing.xs,
+    gap: 2,
   },
   recipeTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '600',
     fontFamily: typography.strong,
   },
   meta: {
-    color: colors.muted,
-    fontWeight: '700',
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontWeight: '400',
   },
   deleteButton: {
     paddingHorizontal: spacing.sm,

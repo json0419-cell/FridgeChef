@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppCard, AppTextInput, SectionHeader } from '../components/AppLayout';
 import { useFeedback } from '../components/AppFeedbackProvider';
 import {
   deleteUserRecipe,
@@ -22,13 +20,14 @@ import {
   rebuildPersonalRecipeEmbeddings,
   type PersonalRecipeEmbeddingStatus,
 } from '../rag/personalRagService';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
-import type { RootStackParamList, UserRecipe, UserRecipeDifficulty, UserRecipeLibrary, UserRecipeSourceType } from '../types';
+import { colors, spacing, typography } from '../styles/theme';
+import type { RecipesStackScreenProps, UserRecipe, UserRecipeDifficulty, UserRecipeLibrary, UserRecipeSourceType } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'UserRecipeLibraryDetail'>;
+type Props = RecipesStackScreenProps<'UserRecipeLibraryDetail'>;
 type SourceFilter = 'all' | UserRecipeSourceType;
 type DifficultyFilter = 'all' | UserRecipeDifficulty;
 type TFunction = ReturnType<typeof useI18n>['t'];
+type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 
 const SOURCE_FILTERS: Array<{ value: SourceFilter }> = [
   { value: 'all' },
@@ -278,7 +277,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView edges={['bottom']} style={styles.screen}>
       <FlatList
         data={filteredRecipes}
         keyExtractor={(item) => item.id}
@@ -287,54 +286,50 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-              <Text style={styles.eyebrow}>{t('libraryDetail.eyebrow')}</Text>
-              <Text style={styles.title}>{library?.name ?? t('libraryDetail.fallbackTitle')}</Text>
-              <Text style={styles.subtitle}>
-                {t('libraryDetail.subtitle', {
-                  count: recipes.length,
-                  status: library?.enabled ? t('userLibraries.enabledMeta') : t('userLibraries.disabledMeta'),
-                })}
-              </Text>
-            </LinearGradient>
+            <View style={styles.pageIntro}>
+              <Text style={styles.pageTitle}>{library?.name ?? t('libraryDetail.fallbackTitle')}</Text>
+              <Text style={styles.pageSubtitle}>{t('libraryDetail.subtitle', {
+                count: recipes.length,
+                status: library?.enabled ? t('userLibraries.enabledMeta') : t('userLibraries.disabledMeta'),
+              })}</Text>
+            </View>
 
-            <View style={styles.actionCard}>
-              <Text style={styles.sectionTitle}>{t('libraryDetail.nameLabel')}</Text>
-              <TextInput
+            <AppCard style={styles.card}>
+              <SectionHeader title={t('libraryDetail.nameLabel')} />
+              <AppTextInput
                 value={renameValue}
                 onChangeText={setRenameValue}
                 placeholder={t('libraryDetail.namePlaceholder')}
-                placeholderTextColor={colors.muted}
                 style={styles.input}
               />
-              <PrimaryButton title={t('libraryDetail.saveName')} variant="secondary" onPress={renameLibrary} loading={renaming} disabled={!library} />
-            </View>
+              <ActionButton title={t('libraryDetail.saveName')} variant="secondary" onPress={renameLibrary} loading={renaming} disabled={!library} />
+            </AppCard>
 
-            <View style={styles.actionCard}>
-              <PrimaryButton title={t('libraryDetail.addRecipe')} onPress={() => navigation.navigate('AddUserRecipe', { libraryId })} />
-              <PrimaryButton
+            <AppCard style={styles.card}>
+              <ActionButton title={t('libraryDetail.addRecipe')} onPress={() => navigation.navigate('AddUserRecipe', { libraryId })} />
+              <ActionButton
                 title={library?.enabled ? t('userLibraries.exclude') : t('userLibraries.include')}
                 variant="secondary"
                 onPress={toggleLibrary}
                 disabled={!library}
               />
-              <PrimaryButton title={t('libraryDetail.deleteThisLibrary')} variant="danger" onPress={confirmDeleteLibrary} disabled={!library} />
-            </View>
+              <ActionButton title={t('libraryDetail.deleteThisLibrary')} variant="destructive" onPress={confirmDeleteLibrary} disabled={!library} />
+            </AppCard>
 
-            <View style={styles.actionCard}>
-              <Text style={styles.sectionTitle}>{t('libraryDetail.bulkTitle')}</Text>
-              <Text style={styles.helper}>
-                {t('libraryDetail.bulkSummary', { selected: selectedCount, shown: filteredRecipes.length })}
-              </Text>
+            <AppCard style={styles.card}>
+              <SectionHeader
+                title={t('libraryDetail.bulkTitle')}
+                detail={t('libraryDetail.bulkSummary', { selected: selectedCount, shown: filteredRecipes.length })}
+              />
               <View style={styles.buttonRow}>
-                <PrimaryButton
+                <ActionButton
                   title={allVisibleSelected ? t('libraryDetail.clearVisibleSelection') : t('libraryDetail.selectVisible')}
                   variant="secondary"
                   onPress={toggleSelectVisibleRecipes}
                   disabled={filteredRecipes.length === 0 || bulkBusy}
                   style={styles.buttonCell}
                 />
-                <PrimaryButton
+                <ActionButton
                   title={t('libraryDetail.clearSelection')}
                   variant="secondary"
                   onPress={() => setSelectedRecipeIds(new Set())}
@@ -343,23 +338,22 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
                 />
               </View>
               <View style={styles.buttonRow}>
-                <PrimaryButton title={t('libraryDetail.enableSelected')} variant="secondary" onPress={() => void bulkSetEnabled(true)} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
-                <PrimaryButton title={t('libraryDetail.disableSelected')} variant="secondary" onPress={() => void bulkSetEnabled(false)} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
+                <ActionButton title={t('libraryDetail.enableSelected')} variant="secondary" onPress={() => void bulkSetEnabled(true)} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
+                <ActionButton title={t('libraryDetail.disableSelected')} variant="secondary" onPress={() => void bulkSetEnabled(false)} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
               </View>
               <View style={styles.buttonRow}>
-                <PrimaryButton title={t('libraryDetail.reindexSelected')} variant="secondary" onPress={() => void rebuildEmbeddings('selected')} loading={bulkBusy && selectedCount > 0} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
-                <PrimaryButton title={t('libraryDetail.reindexAll')} variant="secondary" onPress={() => void rebuildEmbeddings('all')} loading={bulkBusy} disabled={recipes.length === 0 || bulkBusy} style={styles.buttonCell} />
+                <ActionButton title={t('libraryDetail.reindexSelected')} variant="secondary" onPress={() => void rebuildEmbeddings('selected')} loading={bulkBusy && selectedCount > 0} disabled={selectedCount === 0 || bulkBusy} style={styles.buttonCell} />
+                <ActionButton title={t('libraryDetail.reindexAll')} variant="secondary" onPress={() => void rebuildEmbeddings('all')} loading={bulkBusy} disabled={recipes.length === 0 || bulkBusy} style={styles.buttonCell} />
               </View>
-              <PrimaryButton title={t('libraryDetail.deleteSelected')} variant="danger" onPress={confirmBulkDelete} disabled={selectedCount === 0 || bulkBusy} />
-            </View>
+              <ActionButton title={t('libraryDetail.deleteSelected')} variant="destructive" onPress={confirmBulkDelete} disabled={selectedCount === 0 || bulkBusy} />
+            </AppCard>
 
-            <View style={styles.filterCard}>
-              <Text style={styles.sectionTitle}>{t('libraryDetail.searchTitle')}</Text>
-              <TextInput
+            <AppCard style={styles.card}>
+              <SectionHeader title={t('libraryDetail.searchTitle')} />
+              <AppTextInput
                 value={searchText}
                 onChangeText={setSearchText}
                 placeholder={t('libraryDetail.searchPlaceholder')}
-                placeholderTextColor={colors.muted}
                 style={styles.input}
               />
               <FilterRow
@@ -375,23 +369,17 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
               <Text style={styles.filterSummary}>
                 {t('libraryDetail.filterSummary', { shown: filteredRecipes.length, total: recipes.length })}
               </Text>
-            </View>
+            </AppCard>
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>
-              {recipes.length === 0 ? t('libraryDetail.emptyNoRecipes') : t('libraryDetail.emptyNoMatches')}
-            </Text>
-            <Text style={styles.emptyText}>
-              {recipes.length === 0
-                ? t('libraryDetail.emptyNoRecipesText')
-                : t('libraryDetail.emptyNoMatchesText')}
-            </Text>
+          <View style={styles.emptyStateCard}>
+            <Text style={styles.emptyTitle}>{recipes.length === 0 ? t('libraryDetail.emptyNoRecipes') : t('libraryDetail.emptyNoMatches')}</Text>
+            <Text style={styles.emptyText}>{recipes.length === 0 ? t('libraryDetail.emptyNoRecipesText') : t('libraryDetail.emptyNoMatchesText')}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.recipeCard, !item.enabled && styles.recipeCardDisabled]}>
+          <AppCard style={[styles.card, styles.recipeCard, !item.enabled && styles.recipeCardDisabled]}>
             <View style={styles.cardHeader}>
               <View style={styles.flex}>
                 <Text style={styles.recipeTitle}>{item.title}</Text>
@@ -423,7 +411,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
               <Pressable
                 accessibilityRole="button"
                 style={styles.textButton}
-                onPress={() => navigation.navigate('RecipeDetail', { recipeId: item.id })}
+                onPress={() => navigation.navigate('RecipeDetail', { recipeId: item.id, source: 'personal', libraryId })}
               >
                 <Text style={styles.textButtonLabel}>{t('libraryDetail.view')}</Text>
               </Pressable>
@@ -438,10 +426,50 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
                 <Text style={[styles.textButtonLabel, styles.deleteText]}>{t('common.delete')}</Text>
               </Pressable>
             </View>
-          </View>
+          </AppCard>
         )}
       />
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const inactive = disabled || loading;
+  const secondary = variant === 'secondary';
+  const destructive = variant === 'destructive';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.localButton,
+        secondary && styles.localButtonSecondary,
+        destructive && styles.localButtonDestructive,
+        inactive && styles.localButtonDisabled,
+        pressed && !inactive && styles.localButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={secondary ? '#1B4332' : '#FFFFFF'} size="small" /> : null}
+      <Text style={[styles.localButtonText, secondary && styles.localButtonTextSecondary]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -553,45 +581,70 @@ function formatError(error: unknown, t: TFunction) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   content: {
     padding: spacing.lg,
+    paddingBottom: 40,
     gap: spacing.lg,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     gap: spacing.lg,
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.sm,
-    ...shadows.lift,
+  pageIntro: {
+    gap: 6,
   },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    fontFamily: typography.strong,
+  pageTitle: {
+    color: '#1A1A1A',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 26,
   },
-  title: {
-    color: colors.textInverse,
-    fontSize: 36,
-    fontWeight: '900',
-    fontFamily: typography.display,
+  pageSubtitle: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
   },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-    fontSize: 15,
-  },
-  actionCard: {
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  card: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  input: {
+    height: 48,
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+  },
+  emptyStateCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 20,
+    gap: 6,
+  },
+  emptyTitle: {
+    color: '#1A1A1A',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  emptyText: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    lineHeight: 20,
   },
   helper: {
     color: colors.muted,
@@ -606,31 +659,11 @@ const styles = StyleSheet.create({
   buttonCell: {
     flexGrow: 1,
   },
-  filterCard: {
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
   sectionTitle: {
     color: colors.text,
     fontSize: 17,
     fontWeight: '900',
     fontFamily: typography.strong,
-  },
-  input: {
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    paddingHorizontal: spacing.lg,
-    fontSize: 16,
-    fontFamily: typography.body,
   },
   filterRow: {
     flexDirection: 'row',
@@ -638,55 +671,30 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   filterChip: {
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   filterChipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   filterChipText: {
-    color: colors.text,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
   filterChipTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
   },
   filterSummary: {
     color: colors.muted,
     fontWeight: '800',
   },
-  empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
-    padding: spacing.xl,
-    ...shadows.card,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-    fontFamily: typography.display,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    color: colors.muted,
-    lineHeight: 22,
-  },
   recipeCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
     gap: spacing.sm,
-    ...shadows.card,
   },
   recipeCardDisabled: {
     opacity: 0.68,
@@ -712,12 +720,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   recipeBadge: {
-    color: colors.primary,
-    backgroundColor: colors.chip,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
+    color: '#1B4332',
+    backgroundColor: '#F5F7F5',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
     overflow: 'hidden',
   },
   badgeColumn: {
@@ -725,45 +734,49 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   selectChip: {
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   selectChipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   selectChipText: {
-    color: colors.text,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontSize: 12,
+    fontWeight: '600',
   },
   selectChipTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
   },
   statusBadge: {
-    color: colors.textInverse,
-    backgroundColor: colors.primary,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
+    color: '#FFFFFF',
+    backgroundColor: '#1B4332',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
     overflow: 'hidden',
   },
   statusBadgeOff: {
-    backgroundColor: colors.muted,
+    color: '#6B6B6B',
+    backgroundColor: '#F5F7F5',
   },
   indexBadge: {
-    color: colors.text,
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    color: '#1A1A1A',
+    backgroundColor: '#F5F7F5',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
     overflow: 'hidden',
   },
   description: {
@@ -788,5 +801,37 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: colors.danger,
+  },
+  localButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#1B4332',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  localButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  localButtonDestructive: {
+    backgroundColor: '#E07A5F',
+  },
+  localButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  localButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  localButtonDisabled: {
+    opacity: 0.46,
+  },
+  localButtonPressed: {
+    opacity: 0.88,
   },
 });

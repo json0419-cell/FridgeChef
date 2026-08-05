@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { RefreshCw, SlidersHorizontal } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppTextInput } from '../components/AppLayout';
 import {
   fetchDatasetIndex,
   OFFICIAL_DATASET_INDEX_URL,
@@ -14,11 +13,12 @@ import { downloadDatasetPack, uninstallDataset, type DatasetDownloadProgress } f
 import { clearActiveDataset, listInstalledDatasets, setActiveDataset } from '../datasets/datasetRegistry';
 import { listUserRecipeLibraries, listUserRecipes } from '../db/userRecipesRepository';
 import { useI18n } from '../i18n/i18n';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
-import type { DatasetIndexEntry, InstalledDataset, RootStackParamList } from '../types';
+import { colors, spacing, typography } from '../styles/theme';
+import type { DatasetIndexEntry, InstalledDataset, RecipesStackScreenProps } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'DatasetLibrary'>;
+type Props = RecipesStackScreenProps<'DatasetLibrary'>;
 type TFunction = ReturnType<typeof useI18n>['t'];
+type ActionButtonVariant = 'primary' | 'secondary';
 
 export function DatasetLibraryScreen({ navigation }: Props) {
   const { language, t } = useI18n();
@@ -33,6 +33,16 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   const [manualDownloading, setManualDownloading] = useState(false);
   const [downloadingDatasetId, setDownloadingDatasetId] = useState<string | null>(null);
   const [progress, setProgress] = useState<DatasetDownloadProgress | null>(null);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity accessibilityLabel={t('nav.settings')} accessibilityRole="button" onPress={() => navigation.navigate('Settings')} style={styles.headerSettingsButton}>
+          <SlidersHorizontal size={20} color="#6B6B6B" strokeWidth={2} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, t]);
 
   const loadDatasets = useCallback(async () => {
     setDatasets(await listInstalledDatasets());
@@ -138,31 +148,40 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Text style={styles.eyebrow}>{t('dataset.eyebrow')}</Text>
-          <Text style={styles.title}>{t('dataset.title')}</Text>
-          <Text style={styles.subtitle}>{t('dataset.subtitle')}</Text>
-        </LinearGradient>
-
-        <View style={styles.personalBox}>
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, styles.personalTitle]}>{t('dataset.myLibraries')}</Text>
+            <Text style={styles.sectionTitle}>{myLibrariesTitle(language)}</Text>
             <Text style={styles.personalBadge}>{t('dataset.enabledCount', { count: enabledUserLibraryCount })}</Text>
           </View>
-          <Text style={styles.personalText}>{t('dataset.personalStats', { libraries: userLibraryCount, recipes: userRecipeCount })}</Text>
-          <PrimaryButton title={t('dataset.manageMine')} variant="secondary" onPress={() => navigation.navigate('UserRecipeLibraries')} />
+          {userLibraryCount === 0 ? (
+            <View style={styles.personalEmpty}>
+              <Text style={styles.secondaryText}>{noPersonalLibrariesText(language)}</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => navigation.navigate('UserRecipeLibraries')}
+                style={styles.personalManageButton}
+              >
+                <Text style={styles.personalManageButtonText}>{t('dataset.manageMine')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.personalSummaryRow}>
+              <Text style={styles.secondaryText}>{t('dataset.personalStats', { libraries: userLibraryCount, recipes: userRecipeCount })}</Text>
+              <ActionButton title={t('dataset.manageMine')} variant="secondary" onPress={() => navigation.navigate('UserRecipeLibraries')} style={styles.inlineButton} />
+            </View>
+          )}
         </View>
 
-        <View style={styles.installBox}>
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('dataset.official')}</Text>
-            <Pressable accessibilityRole="button" onPress={loadOfficialDatasets}>
-              <Text style={styles.refreshText}>{t('dataset.refresh')}</Text>
-            </Pressable>
+            <TouchableOpacity accessibilityRole="button" onPress={loadOfficialDatasets} style={styles.refreshButton}>
+              <Text style={styles.refreshButtonText}>{t('dataset.refresh')}</Text>
+              <RefreshCw size={14} color="#1B4332" style={styles.refreshIcon} />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.helperText}>{t('dataset.officialHelper')}</Text>
           {officialLoading ? <Text style={styles.helperText}>{t('dataset.loadingOfficial')}</Text> : null}
           {officialError ? <Text style={styles.errorText}>{officialError}</Text> : null}
           {officialDatasets.map((item) => {
@@ -171,33 +190,28 @@ export function DatasetLibraryScreen({ navigation }: Props) {
             return (
               <View key={item.id} style={styles.officialCard}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleBox}>
-                    <Text style={styles.datasetName}>{formatDatasetName(installed?.name ?? item.name, t)}</Text>
-                    <Text style={styles.meta}>
-                      {item.level} · {formatRecipeCount(item.chunkCount, language, t)} · {formatBytes(item.sizeBytes)}
-                    </Text>
-                  </View>
+                  <Text style={styles.datasetName}>{formatDatasetName(installed?.name ?? item.name, t)}</Text>
                   {installed ? <StatusBadge active={installed.active} t={t} /> : null}
                 </View>
-                <Text style={styles.line}>
-                  {t('dataset.recipeCount', { count: formatCount(item.recipeCount, language) })} · {item.embeddingModel} ·{' '}
-                  {t('dataset.dimension', { dimension: item.embeddingDimension })}
+                <Text style={styles.meta}>
+                  {t('dataset.recipeCount', { count: formatCount(item.recipeCount, language) })} · {formatBytes(item.sizeBytes)}
                 </Text>
                 {installed ? (
                   <View style={styles.actions}>
-                    <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => toggleDataset(installed)}>
+                    <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => toggleDataset(installed)}>
                       <Text style={styles.linkText}>{installed.active ? t('dataset.disable') : t('dataset.enable')}</Text>
-                    </Pressable>
-                    <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => remove(installed)}>
+                    </TouchableOpacity>
+                    <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => remove(installed)}>
                       <Text style={[styles.linkText, styles.deleteText]}>{t('common.delete')}</Text>
-                    </Pressable>
+                    </TouchableOpacity>
                   </View>
                 ) : (
-                  <PrimaryButton
+                  <ActionButton
                     title={t('dataset.download')}
                     disabled={Boolean(downloadingDatasetId) || manualDownloading}
                     loading={downloadingThis}
                     onPress={() => installOfficialDataset(item)}
+                    style={styles.cardButton}
                   />
                 )}
               </View>
@@ -211,18 +225,17 @@ export function DatasetLibraryScreen({ navigation }: Props) {
           ) : null}
         </View>
 
-        <View style={styles.installBox}>
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('dataset.downloadFromUrl')}</Text>
-          <TextInput
+          <AppTextInput
             value={manifestUrl}
             onChangeText={setManifestUrl}
             autoCapitalize="none"
             autoCorrect={false}
             placeholder={t('dataset.urlPlaceholder')}
-            placeholderTextColor={colors.muted}
             style={styles.input}
           />
-          <PrimaryButton title={t('dataset.downloadInstall')} onPress={installFromUrl} loading={manualDownloading} disabled={Boolean(downloadingDatasetId)} />
+          <ActionButton title={t('dataset.downloadInstall')} onPress={installFromUrl} loading={manualDownloading} disabled={Boolean(downloadingDatasetId)} />
           {progress && manualDownloading ? (
             <Text style={styles.progress}>
               {progress.completedFiles}/{progress.totalFiles} {t('common.files')} · {formatBytes(progress.completedBytes)} / {formatBytes(progress.totalBytes)}
@@ -231,16 +244,54 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         </View>
 
         {customDatasets.length > 0 ? (
-          <View style={styles.installBox}>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('dataset.custom')}</Text>
-            <Text style={styles.helperText}>{t('dataset.customHelper')}</Text>
             {customDatasets.map((dataset) => (
               <InstalledDatasetCard key={dataset.id} dataset={dataset} onToggle={toggleDataset} onRemove={remove} language={language} t={t} />
             ))}
           </View>
         ) : null}
       </ScrollView>
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const inactive = disabled || loading;
+  const secondary = variant === 'secondary';
+  const spinnerColor = secondary ? '#1B4332' : '#FFFFFF';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.solidButton,
+        secondary ? styles.solidButtonSecondary : styles.solidButtonPrimary,
+        inactive && styles.solidButtonDisabled,
+        pressed && !inactive && styles.solidButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={spinnerColor} size="small" /> : null}
+      <Text style={[styles.solidButtonText, secondary && styles.solidButtonTextSecondary, inactive && styles.solidButtonTextDisabled]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -260,26 +311,19 @@ function InstalledDatasetCard({
   return (
     <View style={styles.officialCard}>
       <View style={styles.cardHeader}>
-        <View style={styles.cardTitleBox}>
-          <Text style={styles.datasetName}>{formatDatasetName(dataset.name, t)}</Text>
-          <Text style={styles.meta}>
-            {dataset.level} · {formatRecipeCount(dataset.chunkCount, language, t)} · {formatBytes(dataset.sizeBytes)}
-          </Text>
-        </View>
+        <Text style={styles.datasetName}>{formatDatasetName(dataset.name, t)}</Text>
         <StatusBadge active={dataset.active} t={t} />
       </View>
-      <Text style={styles.line}>{dataset.description}</Text>
-      <Text style={styles.line}>
-        {t('dataset.model')}：{dataset.embeddingModel} · {t('dataset.dimension', { dimension: dataset.embeddingDimension })} ·{' '}
-        {formatBytes(dataset.sizeBytes)}
+      <Text style={styles.meta}>
+        {t('dataset.recipeCount', { count: formatCount(dataset.recipeCount, language) })} · {formatBytes(dataset.sizeBytes)}
       </Text>
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => onToggle(dataset)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => onToggle(dataset)}>
           <Text style={styles.linkText}>{dataset.active ? t('dataset.disable') : t('dataset.enable')}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => onRemove(dataset)}>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => onRemove(dataset)}>
           <Text style={[styles.linkText, styles.deleteText]}>{t('common.delete')}</Text>
-        </Pressable>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -315,10 +359,6 @@ function formatCount(value: number, language: string) {
   return value.toLocaleString(language === 'en' ? 'en-US' : 'zh-CN');
 }
 
-function formatRecipeCount(value: number, language: string, t: TFunction) {
-  return t('dataset.chunkCount', { count: formatCount(value, language) });
-}
-
 function formatDatasetName(value: string, t: TFunction) {
   return value
     .replace(/吃什么\s*官方菜谱库/g, t('dataset.officialLibraryName'))
@@ -328,69 +368,85 @@ function formatDatasetName(value: string, t: TFunction) {
     .trim();
 }
 
+function myLibrariesTitle(language: string) {
+  return language === 'en' ? 'My Libraries' : '我的菜谱库';
+}
+
+function noPersonalLibrariesText(language: string) {
+  return language === 'en' ? 'No personal libraries' : '暂无个人菜谱库';
+}
+
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   content: {
-    padding: spacing.lg,
-    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 16,
+    paddingBottom: 40,
+    gap: 24,
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.sm,
-    ...shadows.lift,
+  headerSettingsButton: {
+    padding: 12,
+    marginRight: -12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    fontFamily: typography.strong,
-  },
-  title: {
-    color: colors.textInverse,
-    fontSize: 36,
-    fontWeight: '900',
-    fontFamily: typography.display,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-  },
-  installBox: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
-  },
-  personalBox: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
-  },
-  personalTitle: {
-    color: colors.textInverse,
-  },
-  personalText: {
-    color: 'rgba(255, 255, 255, 0.72)',
+  secondaryText: {
+    color: '#6B6B6B',
     lineHeight: 21,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '400',
+    flex: 1,
   },
   personalBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.gold,
-    color: colors.ink,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
+    alignSelf: 'center',
+    backgroundColor: '#FEF3C7',
+    color: '#1A1A1A',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
     overflow: 'hidden',
+  },
+  section: {
+    gap: spacing.md,
+  },
+  personalEmpty: {
+    marginTop: 8,
+  },
+  personalManageButton: {
+    marginTop: 8,
+    marginBottom: 4,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#1B4332',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    alignSelf: 'flex-start',
+  },
+  personalManageButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1B4332',
+  },
+  personalSummaryRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    borderBottomColor: '#E5E5E5',
+    borderBottomWidth: 1,
+  },
+  inlineButton: {
+    alignSelf: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1B4332',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -399,19 +455,16 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   sectionTitle: {
-    color: colors.text,
-    fontSize: 19,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontSize: 17,
+    fontWeight: '600',
     fontFamily: typography.strong,
   },
-  refreshText: {
-    color: colors.primary,
-    fontWeight: '900',
-  },
   helperText: {
-    color: colors.muted,
+    color: '#6B6B6B',
+    fontSize: 14,
     lineHeight: 20,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   errorText: {
     color: colors.danger,
@@ -419,30 +472,85 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   officialCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.md,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
     gap: spacing.sm,
   },
   input: {
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderColor: colors.border,
+    height: 48,
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-    color: colors.text,
-    paddingHorizontal: spacing.md,
-    fontSize: 15,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  refreshButtonText: {
+    color: '#1B4332',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  refreshIcon: {
+    marginLeft: 4,
   },
   progress: {
     color: colors.muted,
     lineHeight: 20,
     fontWeight: '700',
   },
+  solidButton: {
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  solidButtonPrimary: {
+    backgroundColor: '#1B4332',
+  },
+  solidButtonSecondary: {
+    height: 40,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
+    borderWidth: 1,
+  },
+  solidButtonDisabled: {
+    opacity: 0.46,
+  },
+  solidButtonPressed: {
+    opacity: 0.88,
+  },
+  solidButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: typography.strong,
+  },
+  solidButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  solidButtonTextDisabled: {
+    color: '#6B6B6B',
+  },
+  cardButton: {
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    alignSelf: 'flex-start',
+  },
   cardHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
   },
@@ -451,63 +559,61 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   datasetName: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '700',
     fontFamily: typography.strong,
+    flex: 1,
   },
   meta: {
-    color: colors.muted,
-    fontWeight: '700',
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontWeight: '400',
   },
   statusBadge: {
-    alignSelf: 'flex-start',
     minWidth: 64,
     minHeight: 30,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusBadgeActive: {
-    backgroundColor: colors.ink,
+    backgroundColor: '#1B4332',
   },
   statusBadgeInactive: {
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#F5F7F5',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
   },
   statusBadgeText: {
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '600',
     fontFamily: typography.strong,
   },
   statusBadgeTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
   },
   statusBadgeTextInactive: {
     color: colors.muted,
   },
-  line: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: spacing.md,
+    gap: 16,
+    marginTop: 12,
   },
   linkButton: {
-    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
   linkText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '900',
+    color: '#1B4332',
+    fontSize: 14,
+    fontWeight: '500',
     fontFamily: typography.strong,
   },
   deleteText: {
-    color: colors.danger,
+    color: '#E07A5F',
   },
 });

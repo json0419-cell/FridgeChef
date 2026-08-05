@@ -21,18 +21,23 @@ export async function listRecipes(): Promise<Recipe[]> {
 }
 
 export async function getRecipeById(id: string): Promise<Recipe | null> {
+  const recipe = await getOfficialRecipeById(id);
+  if (recipe) {
+    return recipe;
+  }
+
+  const userRecipe = await getUserRecipeById(id);
+  return userRecipe ? userRecipeToRecipe(userRecipe) : null;
+}
+
+export async function getOfficialRecipeById(id: string): Promise<Recipe | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<RecipeRow>(
     'SELECT id, title, mainIngredients, seasonings, steps, tags FROM recipes WHERE id = ?',
     id,
   );
 
-  if (row) {
-    return toRecipe(row);
-  }
-
-  const userRecipe = await getUserRecipeById(id);
-  return userRecipe ? userRecipeToRecipe(userRecipe) : null;
+  return row ? toRecipe(row) : null;
 }
 
 function toRecipe(row: RecipeRow): Recipe {

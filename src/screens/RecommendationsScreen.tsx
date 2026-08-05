@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { AppCard, AppTextInput, SectionHeader } from '../components/AppLayout';
 import { useFeedback } from '../components/AppFeedbackProvider';
 import { refineRagRecommendationsWithProvider } from '../ai/recommendationRefiner';
 import { listInstalledDatasets } from '../datasets/datasetRegistry';
@@ -17,22 +17,29 @@ import { getRagRecommendations, type RagResult } from '../rag/ragService';
 import { loadRecommendationCache, saveRecommendationCache } from '../storage/recommendationCacheStorage';
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../storage/recommendationTagStorage';
 import { getApiKey, getSettings } from '../storage/settingsStorage';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
+import { colors, radii, spacing, typography } from '../styles/theme';
 import type {
   AppSettings,
+  HomeStackScreenProps,
   Ingredient,
   InstalledDataset,
   RagRecommendation,
   RefinedRagRecommendation,
-  RootStackParamList,
   UserRecipeDifficulty,
   UserRecipeLibrary,
 } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Recommendations'>;
+type Props = HomeStackScreenProps<'Recommendations'>;
 
 type RecommendationListItem = { kind: 'refined'; recommendation: RefinedRagRecommendation };
 type TFunction = ReturnType<typeof useI18n>['t'];
+type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
+type RequestTagCategoryKey = 'cuisine' | 'meal' | 'dietary';
+type RequestTagCategory = {
+  key: RequestTagCategoryKey;
+  title: string;
+  tags: string[];
+};
 
 const RAG_SEARCH_CANDIDATES = 30;
 const RAG_REFINE_CANDIDATES = 30;
@@ -85,6 +92,7 @@ const REQUEST_TAGS_EN = [
 export function RecommendationsScreen({ navigation }: Props) {
   const { language, t } = useI18n();
   const { showFeedback } = useFeedback();
+  const insets = useSafeAreaInsets();
   const [refinedRecommendations, setRefinedRecommendations] = useState<RefinedRagRecommendation[]>([]);
   const [ragResult, setRagResult] = useState<RagResult | null>(null);
   const [refineMessage, setRefineMessage] = useState<string | null>(null);
@@ -97,6 +105,11 @@ export function RecommendationsScreen({ navigation }: Props) {
   const [recommendationRequest, setRecommendationRequestState] = useState('');
   const [requestTags, setRequestTags] = useState(() => (language === 'en' ? REQUEST_TAGS_EN : REQUEST_TAGS_ZH));
   const [newRequestTag, setNewRequestTag] = useState('');
+  const [expandedRequestSections, setExpandedRequestSections] = useState<Record<RequestTagCategoryKey, boolean>>({
+    cuisine: false,
+    meal: false,
+    dietary: false,
+  });
   const loadingRef = useRef(false);
   const loadingMoreRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
@@ -105,6 +118,19 @@ export function RecommendationsScreen({ navigation }: Props) {
   const cacheInputSignatureRef = useRef<string | null>(null);
   const recommendationRequestRef = useRef('');
   const activeRecommendationRequestRef = useRef('');
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerStyle: { backgroundColor: '#FFFFFF' },
+      headerShadowVisible: false,
+      headerTintColor: '#1A1A1A',
+      headerTitleStyle: {
+        color: '#1A1A1A',
+        fontSize: 20,
+        fontWeight: '700',
+      },
+    });
+  }, [navigation]);
 
   const setRecommendationRequest = (value: string) => {
     recommendationRequestRef.current = value;
@@ -446,6 +472,13 @@ export function RecommendationsScreen({ navigation }: Props) {
     setRecommendationRequest(buildRecommendationRequest([...selectedTags, tag], language));
   }, [language]);
 
+  const toggleRequestSection = useCallback((section: RequestTagCategoryKey) => {
+    setExpandedRequestSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  }, []);
+
   const addRecommendationRequestTag = useCallback(async () => {
     const tag = normalizeRequestTag(newRequestTag);
     if (!tag) {
@@ -552,91 +585,93 @@ export function RecommendationsScreen({ navigation }: Props) {
   };
 
   const isFridgeEmpty = ingredientCount === 0;
-  const needsGeminiKey = refineMessage === t('recommendations.needGeminiKey');
   const listData: RecommendationListItem[] = refinedRecommendations.map((recommendation) => ({
     kind: 'refined',
     recommendation,
   }));
+  const selectedRequestTags = parseRecommendationRequestTags(recommendationRequest);
+  const requestTagCategories = buildRequestTagCategories(requestTags, language);
+  const fixedActionPaddingBottom = Math.max(insets.bottom, 12);
 
   if (loading && !hasLoadedOnce) {
     return (
-      <Screen>
+      <SafeAreaView style={styles.screen}>
         <View style={styles.loadingScreen}>
-          <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.loadingHero}>
-            <ActivityIndicator color={colors.textInverse} size="large" />
-            <Text style={styles.loadingTitle}>{t('recommendations.loadingTitle')}</Text>
-            <Text style={styles.loadingText}>{t('recommendations.loadingText')}</Text>
-          </LinearGradient>
+          <ActivityIndicator color="#1B4332" size="large" />
+          <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
+          <Text style={styles.emptyText}>{t('recommendations.loadingText')}</Text>
         </View>
-      </Screen>
+      </SafeAreaView>
     );
   }
 
   return (
-    <Screen>
+    <SafeAreaView style={styles.screen}>
       <FlatList
         data={listData}
         keyExtractor={(item) => item.recommendation.id}
         refreshing={loading}
         onRefresh={refreshRecommendations}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 112 + fixedActionPaddingBottom }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
-            <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-              <Text style={styles.eyebrow}>{t('recommendations.eyebrow')}</Text>
-              <Text style={styles.title}>{t('recommendations.title')}</Text>
-              <Text style={styles.subtitle}>{buildSubtitle({ isFridgeEmpty, ragResult, ingredientCount, t })}</Text>
-              <View style={styles.modeRow}>
-                <Text style={styles.modeBadge}>
-                  {isFridgeEmpty ? t('recommendations.inspirationMode') : t('recommendations.ingredientsCount', { count: ingredientCount })}
+            <View style={styles.modeRow}>
+              <RequestTagPill
+                label={isFridgeEmpty ? t('recommendations.inspirationMode') : t('recommendations.ingredientsCount', { count: ingredientCount })}
+              />
+            </View>
+            <AppCard style={styles.minimalCard}>
+              <View style={styles.requestHeader}>
+                <Text style={styles.requestTitle}>{t('recommendations.requestTitle')}</Text>
+                <Text numberOfLines={1} style={styles.requestHelperText}>
+                  {requestHelperShort(language)}
                 </Text>
               </View>
-            </LinearGradient>
-            <View style={styles.requestPanel}>
-              <Text style={styles.requestTitle}>{t('recommendations.requestTitle')}</Text>
-              <Text style={styles.requestHelper}>{t('recommendations.requestHelper')}</Text>
-              {recommendationRequest.trim() ? (
-                <View style={styles.requestSummary}>
-                  <Text style={styles.requestSummaryLabel}>{t('recommendations.currentRequest')}</Text>
-                  <Text style={styles.requestSummaryText}>{recommendationRequest}</Text>
+              {selectedRequestTags.length > 0 ? (
+                <View style={styles.selectedRequestArea}>
+                  <View style={styles.selectedRequestHeader}>
+                    <Text style={styles.selectedRequestLabel}>{t('recommendations.currentRequest')}</Text>
+                    <Pressable accessibilityRole="button" onPress={clearRecommendationRequest} disabled={loading || loadingMore} style={styles.clearRequestLink}>
+                      <Text style={styles.clearRequestText}>{t('recommendations.requestClear')}</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.selectedRequestTags}>
+                    {selectedRequestTags.map((tag) => (
+                      <RequestTagPill
+                        key={tag}
+                        label={tag}
+                        active
+                        compact
+                        onPress={() => toggleRecommendationRequestTag(tag)}
+                      />
+                    ))}
+                  </View>
                 </View>
               ) : null}
-              <View style={styles.requestTagRow}>
-                {requestTags.map((tag) => {
-                  const selected = isRequestTagSelected(recommendationRequest, tag);
-                  return (
-                    <View key={tag} style={[styles.requestTag, selected && styles.requestTagActive]}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => toggleRecommendationRequestTag(tag)}
-                        style={({ pressed }) => [styles.requestTagLabelButton, pressed && styles.requestTagPressed]}
-                      >
-                        <Text style={[styles.requestTagText, selected && styles.requestTagTextActive]}>{tag}</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t('recommendations.deleteTag', { tag })}
-                        onPress={() => void deleteRecommendationRequestTag(tag)}
-                        style={({ pressed }) => [styles.requestTagDelete, pressed && styles.requestTagPressed]}
-                      >
-                        <Text style={[styles.requestTagDeleteText, selected && styles.requestTagDeleteTextActive]}>x</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
+              <View style={styles.requestAccordionList}>
+                {requestTagCategories.map((category) => (
+                  <RequestTagAccordion
+                    key={category.key}
+                    category={category}
+                    expanded={expandedRequestSections[category.key]}
+                    recommendationRequest={recommendationRequest}
+                    onToggleSection={() => toggleRequestSection(category.key)}
+                    onToggleTag={toggleRecommendationRequestTag}
+                    onDeleteTag={(tag) => void deleteRecommendationRequestTag(tag)}
+                  />
+                ))}
               </View>
               <View style={styles.requestAddRow}>
-                <TextInput
+                <AppTextInput
                   value={newRequestTag}
                   onChangeText={setNewRequestTag}
                   placeholder={t('recommendations.tagPlaceholder')}
-                  placeholderTextColor={colors.muted}
                   returnKeyType="done"
                   onSubmitEditing={() => void addRecommendationRequestTag()}
                   style={styles.requestTagInput}
                 />
-                <PrimaryButton
+                <ActionButton
                   title={t('recommendations.tagAdd')}
                   variant="secondary"
                   onPress={() => void addRecommendationRequestTag()}
@@ -644,66 +679,49 @@ export function RecommendationsScreen({ navigation }: Props) {
                   style={styles.requestAddButton}
                 />
               </View>
-              <View style={styles.requestActions}>
-                {recommendationRequest.trim() ? (
-                  <PrimaryButton
-                    title={t('recommendations.requestClear')}
-                    variant="secondary"
-                    onPress={clearRecommendationRequest}
-                    disabled={loading || loadingMore}
-                    style={styles.requestActionButton}
-                  />
-                ) : null}
-                <PrimaryButton
-                  title={t('recommendations.applyRequest')}
-                  onPress={applyRecommendationRequest}
-                  loading={loading}
-                  disabled={loadingMore}
-                  style={styles.requestActionButton}
-                />
-              </View>
-            </View>
+            </AppCard>
             <View style={styles.headerActions}>
-              <PrimaryButton
+              <TextAction
                 title={t('recommendations.refresh')}
-                variant="secondary"
                 onPress={refreshRecommendations}
                 loading={loading}
-                style={styles.headerActionButton}
               />
-              <PrimaryButton
+              <TextAction
                 title={t('recommendations.changeBatch')}
-                variant="secondary"
                 onPress={changeBatch}
                 loading={loadingMore}
                 disabled={loading || ragResult?.mode !== 'rag'}
-                style={styles.headerActionButton}
               />
             </View>
             {isFridgeEmpty ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeTitle}>{t('recommendations.fridgeEmptyTitle')}</Text>
-                <Text style={styles.noticeText}>{t('recommendations.fridgeEmptyText')}</Text>
+              <AppCard style={styles.minimalCard}>
+                <SectionHeader title={t('recommendations.fridgeEmptyTitle')} detail={t('recommendations.fridgeEmptyText')} />
                 <View style={styles.noticeActions}>
-                  <PrimaryButton title={t('recommendations.addIngredient')} onPress={() => navigation.navigate('AddIngredient')} />
-                  <PrimaryButton
+                  <ActionButton
+                    title={t('recommendations.addIngredient')}
+                    onPress={() => navigation.navigate('FridgeStack', { screen: 'AddIngredient', initial: false })}
+                  />
+                  <ActionButton
                     title={t('recommendations.photoRecognize')}
                     variant="secondary"
-                    onPress={() => navigation.navigate('AddIngredient', { mode: 'photo' })}
+                    onPress={() => navigation.navigate('FridgeStack', { screen: 'AddIngredient', params: { mode: 'photo' }, initial: false })}
                   />
                 </View>
-              </View>
+              </AppCard>
             ) : null}
             {ragResult?.mode === 'unavailable' ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeTitle}>{t('recommendations.ragUnavailable')}</Text>
-                <Text style={styles.noticeText}>{formatRagUnavailableMessage(ragResult, t)}</Text>
+              <AppCard style={styles.minimalCard}>
+                <SectionHeader title={t('recommendations.ragUnavailable')} detail={formatRagUnavailableMessage(ragResult, t)} />
                 {ragResult.reason === 'no_dataset' ? (
-                  <PrimaryButton title={t('recommendations.goDataset')} variant="secondary" onPress={() => navigation.navigate('DatasetLibrary')} />
+                  <ActionButton
+                    title={t('recommendations.goDataset')}
+                    variant="secondary"
+                    onPress={() => navigation.navigate('RecipesStack', { screen: 'DatasetLibrary' })}
+                  />
                 ) : null}
                 {ragResult.reason === 'no_model' ? (
                   <>
-                    <PrimaryButton title={t('recommendations.downloadModel')} onPress={installOnnxModel} loading={modelDownloading} />
+                    <ActionButton title={t('recommendations.downloadModel')} onPress={installOnnxModel} loading={modelDownloading} />
                     {modelProgress ? (
                       <Text style={styles.noticeText}>
                         {modelProgress.fileName} · {modelProgress.completedFiles}/{modelProgress.totalFiles} {t('common.files')} ·{' '}
@@ -712,12 +730,12 @@ export function RecommendationsScreen({ navigation }: Props) {
                     ) : null}
                   </>
                 ) : null}
-              </View>
+              </AppCard>
             ) : null}
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
+          <AppCard style={[styles.minimalCard, styles.empty]}>
             {loading ? (
               <>
                 <ActivityIndicator color={colors.primary} />
@@ -728,17 +746,14 @@ export function RecommendationsScreen({ navigation }: Props) {
               <>
                 <Text style={styles.emptyTitle}>{t('recommendations.emptyTitle')}</Text>
                 <Text style={styles.emptyText}>{refineMessage || t('recommendations.emptyText')}</Text>
-                {needsGeminiKey ? (
-                  <PrimaryButton title={t('recommendations.goGeminiSettings')} variant="secondary" onPress={() => navigation.navigate('Settings')} />
-                ) : null}
               </>
             )}
-          </View>
+          </AppCard>
         }
         ListFooterComponent={
           ragResult?.mode === 'rag' ? (
             <View style={styles.footer}>
-              <PrimaryButton
+              <ActionButton
                 title={t('recommendations.loadMore')}
                 variant="secondary"
                 loading={loadingMore}
@@ -749,7 +764,7 @@ export function RecommendationsScreen({ navigation }: Props) {
           ) : null
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <AppCard style={[styles.minimalCard, styles.card]}>
             <View style={styles.cardHeader}>
               <View style={styles.recipeTitleBlock}>
                 <Text style={styles.recipeTitle}>{item.recommendation.title}</Text>
@@ -790,7 +805,7 @@ export function RecommendationsScreen({ navigation }: Props) {
             )}
             {item.recommendation.notes ? <Text style={styles.notes}>{t('recommendations.notes', { notes: item.recommendation.notes })}</Text> : null}
             <View style={styles.cardFooter}>
-              <PrimaryButton
+              <ActionButton
                 title={t('recommendations.markCooked')}
                 variant="secondary"
                 onPress={() => markCooked(item.recommendation.recipeId ?? item.recommendation.id, item.recommendation.title)}
@@ -804,11 +819,179 @@ export function RecommendationsScreen({ navigation }: Props) {
                 <Text style={styles.dismissButtonText}>{t('recommendations.replaceThis')}</Text>
               </Pressable>
             </View>
-          </View>
+          </AppCard>
         )}
       />
-    </Screen>
+      <View style={[styles.fixedRequestBar, { paddingBottom: fixedActionPaddingBottom }]}>
+        <ActionButton
+          title={t('recommendations.applyRequest')}
+          onPress={applyRecommendationRequest}
+          loading={loading}
+          disabled={loadingMore}
+          style={styles.fixedRequestButton}
+        />
+      </View>
+    </SafeAreaView>
   );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const inactive = disabled || loading;
+  const secondary = variant === 'secondary';
+  const destructive = variant === 'destructive';
+  const spinnerColor = secondary ? '#1B4332' : '#FFFFFF';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        secondary && styles.actionButtonSecondary,
+        destructive && styles.actionButtonDestructive,
+        inactive && styles.actionButtonDisabled,
+        pressed && !inactive && styles.actionButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={spinnerColor} size="small" /> : null}
+      <Text style={[styles.actionButtonText, secondary && styles.actionButtonTextSecondary, inactive && styles.actionButtonTextDisabled]}>{title}</Text>
+    </Pressable>
+  );
+}
+
+function TextAction({
+  title,
+  onPress,
+  disabled = false,
+  loading = false,
+}: {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const inactive = disabled || loading;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [styles.textAction, inactive && styles.textActionDisabled, pressed && !inactive && styles.textActionPressed]}
+    >
+      {loading ? <ActivityIndicator color="#1B4332" size="small" /> : null}
+      <Text style={styles.textActionLabel}>{title}</Text>
+    </Pressable>
+  );
+}
+
+function RequestTagAccordion({
+  category,
+  expanded,
+  recommendationRequest,
+  onToggleSection,
+  onToggleTag,
+  onDeleteTag,
+}: {
+  category: RequestTagCategory;
+  expanded: boolean;
+  recommendationRequest: string;
+  onToggleSection: () => void;
+  onToggleTag: (tag: string) => void;
+  onDeleteTag: (tag: string) => void;
+}) {
+  const selectedCount = category.tags.filter((tag) => isRequestTagSelected(recommendationRequest, tag)).length;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+
+  return (
+    <View style={styles.requestAccordionSection}>
+      <Pressable accessibilityRole="button" onPress={onToggleSection} style={styles.requestAccordionHeader}>
+        <Text style={styles.requestAccordionTitle}>{category.title}</Text>
+        <View style={styles.requestAccordionMeta}>
+          {selectedCount > 0 ? <Text style={styles.requestAccordionCount}>{selectedCount}</Text> : null}
+          <Chevron size={18} color="#6B6B6B" strokeWidth={2} />
+        </View>
+      </Pressable>
+      {expanded ? (
+        <View style={styles.requestTagRow}>
+          {category.tags.map((tag) => {
+            const selected = isRequestTagSelected(recommendationRequest, tag);
+            return (
+              <RequestTagPill
+                key={tag}
+                label={tag}
+                active={selected}
+                onPress={() => onToggleTag(tag)}
+                onRemove={() => onDeleteTag(tag)}
+              />
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function RequestTagPill({
+  label,
+  active = false,
+  compact = false,
+  onPress,
+  onRemove,
+}: {
+  label: string;
+  active?: boolean;
+  compact?: boolean;
+  onPress?: () => void;
+  onRemove?: () => void;
+}) {
+  const content = (
+    <>
+      <Text style={[styles.requestTagText, active && styles.requestTagTextActive]}>{label}</Text>
+      {onRemove ? (
+        <Pressable accessibilityRole="button" onPress={onRemove} style={styles.requestTagRemove}>
+          <Text style={styles.requestTagRemoveText}>x</Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.requestTagPill,
+          compact && styles.requestTagPillCompact,
+          active && styles.requestTagPillActive,
+          pressed && styles.textActionPressed,
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={[styles.requestTagPill, compact && styles.requestTagPillCompact, active && styles.requestTagPillActive]}>{content}</View>;
 }
 
 async function refineWithRetry(task: () => Promise<RefinedRagRecommendation[]>, t: TFunction) {
@@ -865,82 +1048,6 @@ function getRagSourceLabel(recommendation: RagRecommendation | undefined, t: TFu
   }
 
   return label;
-}
-
-function buildSubtitle({
-  isFridgeEmpty,
-  ragResult,
-  ingredientCount,
-  t,
-}: {
-  isFridgeEmpty: boolean;
-  ragResult: RagResult | null;
-  ingredientCount: number;
-  t: TFunction;
-}) {
-  if (ragResult?.mode === 'rag') {
-    const datasetName = formatRagDatasetName(ragResult.datasetName, t);
-    const modelName = formatRagModelName(ragResult.modelName, t);
-    return isFridgeEmpty
-      ? t('recommendations.subtitleRagEmpty', { dataset: datasetName, model: modelName })
-      : t('recommendations.subtitleRagIngredients', {
-          count: ingredientCount,
-          dataset: datasetName,
-          model: modelName,
-        });
-  }
-
-  return isFridgeEmpty
-    ? t('recommendations.subtitleEmpty')
-    : t('recommendations.subtitleWithIngredients', { count: ingredientCount });
-}
-
-function formatRagDatasetName(value: string, t: TFunction) {
-  return value
-    .split('+')
-    .map((item) => formatRagDatasetNamePart(item, t))
-    .filter(Boolean)
-    .join(' + ') || t('recommendations.sourceFallback');
-}
-
-function formatRagDatasetNamePart(value: string, t: TFunction) {
-  const trimmed = value.trim();
-  const personalPrefix = '我的菜谱库：';
-  if (trimmed.startsWith(personalPrefix)) {
-    return t('recommendations.sourcePersonal', { name: trimmed.slice(personalPrefix.length) });
-  }
-
-  const normalized = formatOfficialDatasetName(trimmed, t);
-  if (normalized === '我的菜谱库') {
-    return t('recommendations.datasetPersonal');
-  }
-
-  if (normalized === 'RAG 菜谱库') {
-    return t('recommendations.sourceFallback');
-  }
-
-  return normalized;
-}
-
-function formatOfficialDatasetName(value: string, t: TFunction) {
-  return value
-    .replace(/吃什么\s*官方菜谱库/g, t('dataset.officialLibraryName'))
-    .replace(/\b(?:10k|100k|1m)\b/gi, '')
-    .replace(/\s*[-_]\s*/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
-function formatRagModelName(value: string, t: TFunction) {
-  if (value === '随机灵感推荐') {
-    return t('recommendations.modelRandom');
-  }
-
-  if (value === '本地文本检索') {
-    return t('recommendations.modelText');
-  }
-
-  return value;
 }
 
 function formatRagUnavailableMessage(ragResult: RagResult, t: TFunction) {
@@ -1127,6 +1234,67 @@ function parseRecommendationRequestTags(value: string) {
     .filter(Boolean);
 }
 
+function buildRequestTagCategories(tags: string[], language: 'zh' | 'en'): RequestTagCategory[] {
+  const categories = {
+    cuisine: new Set(language === 'en'
+      ? ['Cantonese style', 'Light and less oily', 'Not spicy', 'Rice-friendly', 'Home-style', 'Warming food', 'Steamed dishes', 'Braise or stew']
+      : ['广东口味', '清淡少油', '不要辣', '下饭菜', '家常菜', '暖胃', '蒸菜', '煲/炖']),
+    meal: new Set(language === 'en'
+      ? ['Kid-friendly', 'Soup or stew', 'Quick meal', 'Solo meal', 'Breakfast', 'Lunch box', 'Dinner', 'Less cleanup']
+      : ['适合小孩', '想喝汤', '快手菜', '一人食', '早餐', '午餐便当', '晚餐', '少洗碗']),
+    dietary: new Set(language === 'en'
+      ? ['High protein', 'Low carb', 'Weight-loss meal', 'Vegetarian']
+      : ['高蛋白', '低碳水', '减脂餐', '素食']),
+  };
+
+  const grouped: Record<RequestTagCategoryKey, string[]> = {
+    cuisine: [],
+    meal: [],
+    dietary: [],
+  };
+
+  for (const tag of tags) {
+    const normalized = normalizeRequestTag(tag);
+    if (categories.cuisine.has(normalized)) {
+      grouped.cuisine.push(tag);
+    } else if (categories.dietary.has(normalized)) {
+      grouped.dietary.push(tag);
+    } else {
+      grouped.meal.push(tag);
+    }
+  }
+
+  return [
+    { key: 'cuisine', title: requestCategoryTitle('cuisine', language), tags: grouped.cuisine },
+    { key: 'meal', title: requestCategoryTitle('meal', language), tags: grouped.meal },
+    { key: 'dietary', title: requestCategoryTitle('dietary', language), tags: grouped.dietary },
+  ];
+}
+
+function requestCategoryTitle(key: RequestTagCategoryKey, language: 'zh' | 'en') {
+  if (language === 'en') {
+    if (key === 'cuisine') {
+      return 'Cuisine style';
+    }
+    if (key === 'meal') {
+      return 'Meal type';
+    }
+    return 'Dietary';
+  }
+
+  if (key === 'cuisine') {
+    return '口味风格';
+  }
+  if (key === 'meal') {
+    return '餐食类型';
+  }
+  return '饮食偏好';
+}
+
+function requestHelperShort(language: 'zh' | 'en') {
+  return language === 'en' ? 'Choose tags to guide the next recommendation.' : '选择标签来调整本次推荐。';
+}
+
 function buildRecommendationRequest(tags: string[], language: 'zh' | 'en') {
   const unique: string[] = [];
   for (const tag of tags) {
@@ -1202,37 +1370,34 @@ function formatBytes(bytes: number) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   loadingScreen: {
     flex: 1,
     padding: spacing.lg,
-    justifyContent: 'center',
-  },
-  loadingHero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.lg,
+    gap: spacing.sm,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    ...shadows.lift,
-  },
-  loadingTitle: {
-    color: colors.textInverse,
-    fontSize: 28,
-    fontWeight: '900',
-    fontFamily: typography.display,
-    textAlign: 'center',
-  },
-  loadingText: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-    fontSize: 15,
-    fontFamily: typography.body,
-    textAlign: 'center',
+    justifyContent: 'center',
   },
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
+  },
+  fixedRequestBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  fixedRequestButton: {
+    width: '100%',
   },
   footer: {
     paddingVertical: spacing.md,
@@ -1245,50 +1410,196 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  headerActionButton: {
-    flexGrow: 1,
+  minimalCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  requestPanel: {
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  actionButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: '#1B4332',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
+  },
+  actionButtonDestructive: {
+    backgroundColor: '#E07A5F',
+  },
+  actionButtonDisabled: {
+    opacity: 0.46,
+  },
+  actionButtonPressed: {
+    opacity: 0.88,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  actionButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  actionButtonTextDisabled: {
+    color: '#6B6B6B',
+  },
+  textAction: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingRight: spacing.md,
+  },
+  textActionPressed: {
+    opacity: 0.72,
+  },
+  textActionDisabled: {
+    opacity: 0.46,
+  },
+  textActionLabel: {
+    color: '#1B4332',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  requestTagPill: {
+    minHeight: 36,
+    borderRadius: radii.pill,
+    borderColor: '#E5E5E5',
+    borderWidth: 1,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  requestTagPillCompact: {
+    minHeight: 30,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  requestTagPillActive: {
+    borderColor: '#1B4332',
+  },
+  requestTagText: {
+    color: '#1A1A1A',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  requestTagTextActive: {
+    color: '#1B4332',
+  },
+  requestTagRemove: {
+    minWidth: 24,
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestTagRemoveText: {
+    color: '#6B6B6B',
+    fontWeight: '700',
+    fontFamily: typography.strong,
+  },
+  requestHeader: {
+    gap: 4,
   },
   requestTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontSize: 17,
+    fontWeight: '600',
     fontFamily: typography.strong,
   },
-  requestHelper: {
-    color: colors.muted,
-    lineHeight: 21,
-    fontWeight: '700',
-    fontFamily: typography.body,
+  requestHelperText: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    lineHeight: 20,
   },
-  requestSummary: {
-    gap: spacing.xs,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-    padding: spacing.md,
+  selectedRequestArea: {
+    gap: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    paddingBottom: spacing.sm,
   },
-  requestSummaryLabel: {
-    color: colors.primary,
+  selectedRequestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  selectedRequestLabel: {
+    color: '#6B6B6B',
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '600',
     fontFamily: typography.strong,
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
   },
-  requestSummaryText: {
-    color: colors.text,
-    lineHeight: 21,
-    fontWeight: '800',
-    fontFamily: typography.body,
+  selectedRequestTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  clearRequestLink: {
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  clearRequestText: {
+    color: '#1B4332',
+    fontSize: 14,
+    fontWeight: '500',
+    fontFamily: typography.strong,
+  },
+  requestAccordionList: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  requestAccordionSection: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  requestAccordionHeader: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  requestAccordionTitle: {
+    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  requestAccordionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  requestAccordionCount: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F5F7F5',
+    color: '#1B4332',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 22,
+    textAlign: 'center',
+    overflow: 'hidden',
   },
   requestAddRow: {
     flexDirection: 'row',
@@ -1297,17 +1608,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   requestTagInput: {
-    minHeight: 50,
     flexGrow: 1,
     flexBasis: 180,
-    borderRadius: radii.pill,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-    color: colors.text,
-    paddingHorizontal: spacing.lg,
-    fontSize: 16,
-    fontFamily: typography.body,
   },
   requestAddButton: {
     flexGrow: 1,
@@ -1317,119 +1619,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  requestTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-    borderRadius: radii.pill,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-  },
-  requestTagLabelButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  requestTagActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-  requestTagPressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.98 }],
-  },
-  requestTagText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-  requestTagTextActive: {
-    color: colors.textInverse,
-  },
-  requestTagDelete: {
-    minWidth: 34,
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderLeftColor: 'rgba(119, 100, 83, 0.22)',
-    borderLeftWidth: 1,
-    paddingHorizontal: spacing.sm,
-  },
-  requestTagDeleteText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-  requestTagDeleteTextActive: {
-    color: colors.textInverse,
-  },
-  requestActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  requestActionButton: {
-    flexGrow: 1,
-  },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    ...shadows.lift,
-  },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    fontFamily: typography.strong,
-  },
-  title: {
-    color: colors.textInverse,
-    fontSize: 32,
-    fontWeight: '900',
-    fontFamily: typography.display,
-    letterSpacing: 0.3,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-    fontSize: 15,
-    fontFamily: typography.body,
-  },
   modeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  modeBadge: {
-    color: colors.textInverse,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
-  },
-  notice: {
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
-  noticeTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    fontFamily: typography.strong,
   },
   noticeText: {
     color: colors.muted,
@@ -1453,12 +1646,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
     padding: spacing.xl,
-    ...shadows.card,
   },
   emptyTitle: {
     color: colors.text,
@@ -1471,13 +1659,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
     gap: spacing.md,
-    ...shadows.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1501,11 +1683,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   metaPill: {
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#F5F7F5',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
     borderRadius: radii.pill,
-    color: colors.text,
+    color: '#1A1A1A',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontWeight: '800',
@@ -1516,10 +1698,10 @@ const styles = StyleSheet.create({
   },
   ingredientPanel: {
     flex: 1,
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
   },
@@ -1536,10 +1718,10 @@ const styles = StyleSheet.create({
   },
   reasonBox: {
     gap: spacing.xs,
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: 12,
     padding: spacing.md,
   },
   reasonLabel: {
@@ -1565,10 +1747,10 @@ const styles = StyleSheet.create({
   },
   stepsBox: {
     gap: spacing.sm,
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: 12,
     padding: spacing.md,
   },
   stepsTitle: {
@@ -1613,10 +1795,10 @@ const styles = StyleSheet.create({
   },
   dismissButton: {
     minHeight: 48,
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    borderRadius: 12,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',

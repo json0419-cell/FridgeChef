@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { generateRecipeFromYouTubeWithGemini } from '../ai/geminiAdapter';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../components/AppLayout';
 import {
   addUserRecipe,
   ensureDefaultUserRecipeLibrary,
@@ -16,17 +14,18 @@ import {
 import { useI18n } from '../i18n/i18n';
 import { indexPersonalRecipeEmbedding } from '../rag/personalRagService';
 import { getApiKey } from '../storage/settingsStorage';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
+import { colors, spacing, typography } from '../styles/theme';
 import type {
-  RootStackParamList,
+  RecipesStackScreenProps,
   UserRecipe,
   UserRecipeDifficulty,
   UserRecipeLibrary,
   UserRecipeSourceType,
 } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'AddUserRecipe'>;
+type Props = RecipesStackScreenProps<'AddUserRecipe'>;
 type TFunction = ReturnType<typeof useI18n>['t'];
+type ActionButtonVariant = 'primary' | 'secondary';
 
 const DIFFICULTIES: UserRecipeDifficulty[] = ['简单', '中等', '偏难', '未知'];
 
@@ -232,17 +231,16 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView edges={['bottom']} style={styles.screen}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-            <Text style={styles.eyebrow}>{t('addRecipe.eyebrow')}</Text>
-            <Text style={styles.title}>{existing ? t('addRecipe.editTitle') : t('addRecipe.addTitle')}</Text>
-            <Text style={styles.subtitle}>{t('addRecipe.subtitle')}</Text>
-          </LinearGradient>
+          <View style={styles.pageIntro}>
+            <Text style={styles.pageTitle}>{existing ? t('addRecipe.editTitle') : t('addRecipe.addTitle')}</Text>
+            <Text style={styles.pageSubtitle}>{t('addRecipe.subtitle')}</Text>
+          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t('addRecipe.saveToLibrary')}</Text>
+          <AppCard style={styles.card}>
+            <SectionHeader title={t('addRecipe.saveToLibrary')} />
             <View style={styles.chipRow}>
               {libraries.map((library) => (
                 <Pressable
@@ -260,12 +258,11 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
                 </Pressable>
               ))}
             </View>
-          </View>
+          </AppCard>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t('addRecipe.youtubeTitle')}</Text>
-            <Text style={styles.helper}>{t('addRecipe.youtubeHelper')}</Text>
-            <TextInput
+          <AppCard style={styles.card}>
+            <SectionHeader title={t('addRecipe.youtubeTitle')} detail={t('addRecipe.youtubeHelper')} />
+            <AppTextInput
               value={youtubeUrl}
               onChangeText={(value) => {
                 setYoutubeUrl(value);
@@ -282,20 +279,19 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
               autoCorrect={false}
               keyboardType="url"
               placeholder="https://www.youtube.com/watch?v=..."
-              placeholderTextColor={colors.muted}
               style={styles.input}
             />
             {youtubeDuplicateTitle ? (
               <Text style={styles.warningText}>{t('addRecipe.duplicateInline', { title: youtubeDuplicateTitle })}</Text>
             ) : null}
-            <PrimaryButton
+            <ActionButton
               title={t('addRecipe.youtubeButton')}
               variant="secondary"
               onPress={() => void generateFromYoutube()}
               loading={generatingFromYoutube || checkingYoutubeDuplicate}
               disabled={saving || Boolean(youtubeDuplicateTitle)}
             />
-          </View>
+          </AppCard>
 
           <Field label={t('addRecipe.recipeName')} value={title} onChangeText={setTitle} placeholder={t('addRecipe.recipeNamePlaceholder')} />
           <Field
@@ -340,7 +336,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
               />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.label}>{t('addRecipe.difficulty')}</Text>
+              <FieldLabel>{t('addRecipe.difficulty')}</FieldLabel>
               <View style={styles.difficultyBox}>
                 {DIFFICULTIES.map((item) => (
                   <Pressable
@@ -367,7 +363,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
             }}
             placeholder={t('addRecipe.sourceUrlPlaceholder')}
           />
-          <PrimaryButton
+          <ActionButton
             title={existing ? t('addRecipe.saveChanges') : t('addRecipe.saveToMine')}
             onPress={save}
             loading={saving}
@@ -375,7 +371,45 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
           />
         </ScrollView>
       </KeyboardAvoidingView>
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const inactive = disabled || loading;
+  const secondary = variant === 'secondary';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.localButton,
+        secondary && styles.localButtonSecondary,
+        inactive && styles.localButtonDisabled,
+        pressed && !inactive && styles.localButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={secondary ? '#1B4332' : '#FFFFFF'} size="small" /> : null}
+      <Text style={[styles.localButtonText, secondary && styles.localButtonTextSecondary]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -398,12 +432,11 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
+      <FieldLabel>{label}</FieldLabel>
+      <AppTextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.muted}
         multiline={multiline}
         keyboardType={keyboardType}
         textAlignVertical={multiline ? 'top' : 'center'}
@@ -542,76 +575,59 @@ function formatError(error: unknown, t: TFunction) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   flex: {
     flex: 1,
   },
   content: {
     padding: spacing.lg,
+    paddingBottom: 40,
     gap: spacing.lg,
+    backgroundColor: '#FFFFFF',
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.sm,
-    ...shadows.lift,
+  pageIntro: {
+    gap: 6,
   },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    fontFamily: typography.strong,
+  pageTitle: {
+    color: '#1A1A1A',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 26,
   },
-  title: {
-    color: colors.textInverse,
-    fontSize: 34,
-    fontWeight: '900',
-    fontFamily: typography.display,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 22,
+  pageSubtitle: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
   },
   card: {
-    gap: spacing.md,
-    borderRadius: radii.lg,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    backgroundColor: colors.surface,
-    padding: spacing.lg,
-    ...shadows.card,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   field: {
     gap: spacing.sm,
   },
-  label: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-  helper: {
-    color: colors.muted,
-    lineHeight: 20,
-    fontWeight: '700',
+  input: {
+    height: 48,
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
   },
   warningText: {
     color: colors.danger,
     lineHeight: 20,
     fontWeight: '800',
-  },
-  input: {
-    minHeight: 54,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    fontFamily: typography.body,
-    ...shadows.card,
   },
   multilineInput: {
     minHeight: 94,
@@ -626,23 +642,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   choiceChip: {
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   choiceChipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   choiceChipText: {
-    color: colors.text,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
   choiceChipTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
   },
   row: {
     flexDirection: 'row',
@@ -656,22 +672,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   difficultyChip: {
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   difficultyChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   difficultyText: {
-    color: colors.text,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
   difficultyTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
+  },
+  localButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#1B4332',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  localButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  localButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  localButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  localButtonDisabled: {
+    opacity: 0.46,
+  },
+  localButtonPressed: {
+    opacity: 0.88,
   },
 });

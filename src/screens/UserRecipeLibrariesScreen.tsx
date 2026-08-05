@@ -1,10 +1,8 @@
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppCard, AppTextInput, SectionHeader } from '../components/AppLayout';
 import {
   createUserRecipeLibrary,
   deleteUserRecipeLibrary,
@@ -13,10 +11,11 @@ import {
   setUserRecipeLibraryEnabled,
 } from '../db/userRecipesRepository';
 import { useI18n } from '../i18n/i18n';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
-import type { RootStackParamList, UserRecipeLibrary } from '../types';
+import { colors, spacing, typography } from '../styles/theme';
+import type { RecipesStackScreenProps, UserRecipeLibrary } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'UserRecipeLibraries'>;
+type Props = RecipesStackScreenProps<'UserRecipeLibraries'>;
+type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 
 export function UserRecipeLibrariesScreen({ navigation }: Props) {
   const { t } = useI18n();
@@ -82,7 +81,7 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView edges={['bottom']} style={styles.screen}>
       <FlatList
         data={libraries}
         keyExtractor={(item) => item.id}
@@ -91,37 +90,31 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-              <Text style={styles.eyebrow}>{t('userLibraries.eyebrow')}</Text>
-              <Text style={styles.title}>{t('userLibraries.title')}</Text>
-              <Text style={styles.subtitle}>{t('userLibraries.subtitle')}</Text>
-              <View style={styles.heroStats}>
-                <Stat value={String(libraries.length)} label={t('userLibraries.libraryStat')} />
-                <Stat value={String(recipeCount)} label={t('userLibraries.recipeStat')} />
-              </View>
-            </LinearGradient>
+            <View style={styles.pageIntro}>
+              <Text style={styles.pageTitle}>{t('userLibraries.title')}</Text>
+              <Text style={styles.pageSubtitle}>{t('userLibraries.subtitle')}</Text>
+            </View>
 
-            <View style={styles.createCard}>
-              <Text style={styles.sectionTitle}>{t('userLibraries.createTitle')}</Text>
-              <TextInput
+            <AppCard style={styles.card}>
+              <SectionHeader title={t('userLibraries.createTitle')} />
+              <AppTextInput
                 value={newLibraryName}
                 onChangeText={setNewLibraryName}
                 placeholder={t('userLibraries.placeholder')}
-                placeholderTextColor={colors.muted}
                 style={styles.input}
               />
-              <PrimaryButton title={t('userLibraries.create')} onPress={createLibrary} loading={creating} />
-            </View>
+              <ActionButton title={t('userLibraries.create')} onPress={createLibrary} loading={creating} />
+            </AppCard>
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
+          <View style={styles.emptyStateCard}>
             <Text style={styles.emptyTitle}>{t('userLibraries.emptyTitle')}</Text>
             <Text style={styles.emptyText}>{t('userLibraries.emptyText')}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.libraryCard}>
+          <AppCard style={styles.libraryCard}>
             <View style={styles.cardHeader}>
               <View style={styles.flex}>
                 <Text style={styles.libraryName}>{item.name}</Text>
@@ -135,43 +128,70 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
               </Text>
             </View>
             <View style={styles.actions}>
-              <PrimaryButton
+              <ActionButton
                 title={t('userLibraries.viewRecipes')}
                 onPress={() => navigation.navigate('UserRecipeLibraryDetail', { libraryId: item.id })}
                 style={styles.actionButton}
               />
-              <PrimaryButton
+              <ActionButton
                 title={t('userLibraries.addRecipe')}
                 variant="secondary"
                 onPress={() => navigation.navigate('AddUserRecipe', { libraryId: item.id })}
                 style={styles.actionButton}
               />
-              <PrimaryButton
+              <ActionButton
                 title={item.enabled ? t('userLibraries.exclude') : t('userLibraries.include')}
                 variant="secondary"
                 onPress={() => toggleLibrary(item)}
                 style={styles.actionButton}
               />
-              <PrimaryButton
+              <ActionButton
                 title={t('userLibraries.deleteLibrary')}
-                variant="danger"
+                variant="destructive"
                 onPress={() => confirmDeleteLibrary(item)}
                 style={styles.actionButton}
               />
             </View>
-          </View>
+          </AppCard>
         )}
       />
-    </Screen>
+    </SafeAreaView>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const secondary = variant === 'secondary';
+  const destructive = variant === 'destructive';
+
   return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      disabled={loading}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.localButton,
+        secondary && styles.localButtonSecondary,
+        destructive && styles.localButtonDestructive,
+        loading && styles.localButtonDisabled,
+        pressed && !loading && styles.localButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={secondary ? '#1B4332' : '#FFFFFF'} size="small" /> : null}
+      <Text style={[styles.localButtonText, secondary && styles.localButtonTextSecondary]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -180,108 +200,80 @@ function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   content: {
     padding: spacing.lg,
+    paddingBottom: 40,
     gap: spacing.lg,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     gap: spacing.lg,
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.md,
-    ...shadows.lift,
+  pageIntro: {
+    gap: 6,
   },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    fontFamily: typography.strong,
-  },
-  title: {
-    color: colors.textInverse,
-    fontSize: 36,
-    fontWeight: '900',
-    fontFamily: typography.display,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-    fontSize: 15,
-  },
-  heroStats: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  stat: {
-    flex: 1,
-    borderRadius: radii.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: spacing.md,
-  },
-  statValue: {
-    color: colors.gold,
-    fontSize: 24,
-    fontWeight: '900',
-    fontFamily: typography.display,
-  },
-  statLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '800',
-  },
-  createCard: {
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-  input: {
-    minHeight: 54,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    paddingHorizontal: spacing.lg,
-    fontSize: 16,
-    fontFamily: typography.body,
-  },
-  empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
-    padding: spacing.xl,
-    ...shadows.card,
-  },
-  emptyTitle: {
-    color: colors.text,
+  pageTitle: {
+    color: '#1A1A1A',
     fontSize: 20,
-    fontWeight: '900',
-    fontFamily: typography.display,
-    marginBottom: spacing.sm,
+    fontWeight: '700',
+    lineHeight: 26,
   },
-  emptyText: {
-    color: colors.muted,
-    lineHeight: 22,
+  pageSubtitle: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   libraryCard: {
-    backgroundColor: colors.ink,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
     gap: spacing.md,
-    ...shadows.card,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  input: {
+    height: 48,
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+  },
+  emptyStateCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 20,
+    gap: 6,
+  },
+  emptyTitle: {
+    color: '#1A1A1A',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  emptyText: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    lineHeight: 20,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -293,7 +285,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   libraryName: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: 22,
     fontWeight: '900',
     fontFamily: typography.strong,
@@ -304,17 +296,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadge: {
-    color: colors.ink,
-    backgroundColor: colors.gold,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
     overflow: 'hidden',
   },
   statusBadgeOff: {
-    color: colors.textInverse,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    color: '#6B6B6B',
+    backgroundColor: '#F5F7F5',
   },
   actions: {
     flexDirection: 'row',
@@ -323,5 +316,37 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flexGrow: 1,
+  },
+  localButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#1B4332',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  localButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  localButtonDestructive: {
+    backgroundColor: '#E07A5F',
+  },
+  localButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  localButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  localButtonDisabled: {
+    opacity: 0.46,
+  },
+  localButtonPressed: {
+    opacity: 0.88,
   },
 });

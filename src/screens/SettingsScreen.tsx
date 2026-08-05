@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -7,22 +8,22 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Screen } from '../components/Screen';
-import { PrimaryButton } from '../components/PrimaryButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../components/AppLayout';
 import { AppConfirmModal } from '../components/AppConfirmModal';
 import { useFeedback } from '../components/AppFeedbackProvider';
 import { testProviderConnection } from '../ai/providerAdapter';
 import { useI18n, type LanguagePreference } from '../i18n/i18n';
 import { clearApiKey, getApiKey, getSettings, saveApiKey, saveSettings } from '../storage/settingsStorage';
-import { colors, gradients, radii, shadows, spacing, typography } from '../styles/theme';
-import type { RecommendationDifficultyPreference, RootStackParamList } from '../types';
+import { colors, spacing, typography } from '../styles/theme';
+import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+type Props = SettingsScreenProps;
+type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 const GEMINI_API_KEY_URL = 'https://aistudio.google.com/app/apikey';
 
 type ConfirmDialogState = {
@@ -49,6 +50,19 @@ export function SettingsScreen({ navigation }: Props) {
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const skipUnsavedApiKeyPromptRef = useRef(false);
   const hasUnsavedApiKey = apiKey.trim() !== savedApiKeyValue;
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerStyle: { backgroundColor: '#FFFFFF' },
+      headerShadowVisible: false,
+      headerTintColor: '#1A1A1A',
+      headerTitleStyle: {
+        color: '#1A1A1A',
+        fontSize: 20,
+        fontWeight: '700',
+      },
+    });
+  }, [navigation]);
 
   useEffect(() => {
     void loadSettings();
@@ -189,17 +203,11 @@ export function SettingsScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-            <Text style={styles.eyebrow}>{t('settings.eyebrow')}</Text>
-            <Text style={styles.title}>{t('settings.title')}</Text>
-            <Text style={styles.subtitle}>{t('settings.subtitle')}</Text>
-          </LinearGradient>
-
-          <View style={[styles.section, styles.languageSection]}>
-            <Text style={styles.label}>{t('settings.language')}</Text>
+          <AppCard style={[styles.minimalCard, styles.languageSection]}>
+            <FieldLabel>{t('settings.language')}</FieldLabel>
             <View style={styles.dropdown}>
               <Pressable
                 accessibilityRole="button"
@@ -236,18 +244,17 @@ export function SettingsScreen({ navigation }: Props) {
                 </View>
               ) : null}
             </View>
-          </View>
+          </AppCard>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>{t('settings.geminiApiKey')}</Text>
-            <TextInput
+          <AppCard style={styles.minimalCard}>
+            <SectionHeader title={t('settings.geminiApiKey')} />
+            <AppTextInput
               value={apiKey}
               onChangeText={setApiKey}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
               placeholder={t('settings.apiKeyPlaceholder')}
-              placeholderTextColor={colors.muted}
               style={styles.input}
             />
             <Pressable
@@ -259,49 +266,47 @@ export function SettingsScreen({ navigation }: Props) {
             </Pressable>
             <View style={styles.apiKeyActions}>
               <View style={styles.apiKeyActionRow}>
-                <PrimaryButton
+                <ActionButton
                   title={t('settings.clearApiKey')}
-                  variant="danger"
+                  variant="destructive"
                   onPress={confirmClearApiKey}
                   disabled={busy || !savedKey}
                   style={styles.apiKeyActionButton}
                 />
-                <PrimaryButton
+                <ActionButton
                   title={t('settings.saveApiKey')}
                   onPress={saveCurrentApiKey}
                   loading={busy}
                   style={styles.apiKeyActionButton}
                 />
               </View>
-              <PrimaryButton
+              <ActionButton
                 title={t('settings.testConnection')}
                 variant="secondary"
                 onPress={testConnection}
                 disabled={busy}
               />
             </View>
-          </View>
+          </AppCard>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>{t('settings.servings')}</Text>
-            <TextInput
+          <AppCard style={styles.minimalCard}>
+            <FieldLabel>{t('settings.servings')}</FieldLabel>
+            <AppTextInput
               value={servings}
               onChangeText={setServings}
               keyboardType="number-pad"
               placeholder="2"
-              placeholderTextColor={colors.muted}
               style={styles.input}
             />
-            <Text style={styles.label}>{t('settings.maxTimeMinutes')}</Text>
-            <TextInput
+            <FieldLabel>{t('settings.maxTimeMinutes')}</FieldLabel>
+            <AppTextInput
               value={maxTimeMinutes}
               onChangeText={setMaxTimeMinutes}
               keyboardType="number-pad"
               placeholder="30"
-              placeholderTextColor={colors.muted}
               style={styles.input}
             />
-            <Text style={styles.label}>{t('settings.preferredDifficulty')}</Text>
+            <FieldLabel>{t('settings.preferredDifficulty')}</FieldLabel>
             <View style={styles.chipRow}>
               {(['any', '简单', '中等', '偏难'] as RecommendationDifficultyPreference[]).map((item) => {
                 const selected = preferredDifficulty === item;
@@ -319,27 +324,24 @@ export function SettingsScreen({ navigation }: Props) {
                 );
               })}
             </View>
-            <Text style={styles.label}>{t('settings.recentHistoryDays')}</Text>
-            <TextInput
+            <FieldLabel>{t('settings.recentHistoryDays')}</FieldLabel>
+            <AppTextInput
               value={recentHistoryDays}
               onChangeText={setRecentHistoryDays}
               keyboardType="number-pad"
               placeholder="7"
-              placeholderTextColor={colors.muted}
               style={styles.input}
             />
-            <Text style={styles.label}>{t('settings.dietaryPreferences')}</Text>
-            <TextInput
+            <FieldLabel>{t('settings.dietaryPreferences')}</FieldLabel>
+            <AppTextInput
               value={dietaryPreferences}
               onChangeText={setDietaryPreferences}
               placeholder={t('settings.dietaryPreferencesPlaceholder')}
-              placeholderTextColor={colors.muted}
               multiline
-              textAlignVertical="top"
               style={[styles.input, styles.multilineInput]}
             />
-            <PrimaryButton title={t('settings.savePlain')} variant="secondary" onPress={savePlainSettings} />
-          </View>
+            <ActionButton title={t('settings.savePlain')} onPress={savePlainSettings} />
+          </AppCard>
         </ScrollView>
       </KeyboardAvoidingView>
       <AppConfirmModal
@@ -352,7 +354,48 @@ export function SettingsScreen({ navigation }: Props) {
         onCancel={() => setConfirmDialog(null)}
         onConfirm={() => confirmDialog?.onConfirm()}
       />
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: ActionButtonVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const inactive = disabled || loading;
+  const secondary = variant === 'secondary';
+  const destructive = variant === 'destructive';
+  const spinnerColor = secondary ? '#1B4332' : '#FFFFFF';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        secondary && styles.actionButtonSecondary,
+        destructive && styles.actionButtonDestructive,
+        inactive && styles.actionButtonDisabled,
+        pressed && !inactive && styles.actionButtonPressed,
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={spinnerColor} size="small" /> : null}
+      <Text style={[styles.actionButtonText, secondary && styles.actionButtonTextSecondary, inactive && styles.actionButtonTextDisabled]}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -406,6 +449,10 @@ function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   flex: {
     flex: 1,
   },
@@ -413,49 +460,62 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.sm,
-    ...shadows.lift,
-  },
-  eyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    fontFamily: typography.strong,
-  },
-  title: {
-    color: colors.textInverse,
-    fontSize: 34,
-    fontWeight: '900',
-    fontFamily: typography.display,
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.74)',
-    lineHeight: 23,
-    fontFamily: typography.body,
-  },
-  section: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
-  },
   languageSection: {
     zIndex: 30,
     elevation: 30,
   },
-  label: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '900',
+  actionButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#1B4332',
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderColor: '#1B4332',
+    borderWidth: 1,
+  },
+  actionButtonDestructive: {
+    backgroundColor: '#E07A5F',
+  },
+  actionButtonDisabled: {
+    opacity: 0.46,
+  },
+  actionButtonPressed: {
+    opacity: 0.88,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
     fontFamily: typography.strong,
+  },
+  actionButtonTextSecondary: {
+    color: '#1B4332',
+  },
+  actionButtonTextDisabled: {
+    color: '#6B6B6B',
+  },
+  minimalCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  input: {
+    height: 48,
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    fontSize: 16,
   },
   dropdown: {
     gap: spacing.xs,
@@ -464,10 +524,10 @@ const styles = StyleSheet.create({
   },
   dropdownButton: {
     minHeight: 52,
-    borderRadius: radii.md,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,13 +554,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 50,
-    ...shadows.card,
     elevation: 50,
     overflow: 'hidden',
-    borderRadius: radii.md,
-    borderColor: colors.border,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
   },
   dropdownOption: {
     minHeight: 48,
@@ -510,7 +569,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   dropdownOptionActive: {
-    backgroundColor: colors.ink,
+    backgroundColor: '#F5F7F5',
   },
   dropdownOptionPressed: {
     opacity: 0.88,
@@ -522,18 +581,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.strong,
   },
   dropdownOptionTextActive: {
-    color: colors.textInverse,
-  },
-  input: {
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-    color: colors.text,
-    paddingHorizontal: spacing.lg,
-    fontSize: 16,
-    fontFamily: typography.body,
+    color: '#1B4332',
   },
   helper: {
     color: colors.muted,
@@ -570,28 +618,30 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   choiceChip: {
-    borderRadius: radii.pill,
-    borderColor: colors.border,
+    height: 32,
+    borderRadius: 10,
+    borderColor: '#E5E5E5',
     borderWidth: 1,
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: '#F5F7F5',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   choiceChipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   choiceChipText: {
-    color: colors.text,
-    fontWeight: '900',
+    color: '#1A1A1A',
+    fontWeight: '600',
     fontFamily: typography.strong,
   },
   choiceChipTextActive: {
-    color: colors.textInverse,
+    color: '#FFFFFF',
   },
   multilineInput: {
+    height: 104,
     minHeight: 104,
-    paddingTop: spacing.md,
     lineHeight: 22,
   },
 });

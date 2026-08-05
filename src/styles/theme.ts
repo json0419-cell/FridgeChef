@@ -1,16 +1,21 @@
 export const colors = {
   background: '#FFF8EC',
+  backgroundTop: '#FFF3DC',
   backgroundDeep: '#F3E2C4',
   surface: '#FFFDF8',
+  surfaceRaised: '#FFFFFF',
   surfaceAlt: '#F7EBD4',
+  surfaceMuted: '#F0DFC2',
   surfaceStrong: '#20160F',
   text: '#21160E',
   textInverse: '#FFF8EC',
   muted: '#776453',
+  mutedOnDark: 'rgba(255, 248, 236, 0.74)',
   border: '#E8D7B8',
   borderStrong: '#D7B981',
   primary: '#1D6F50',
   primaryPressed: '#124A36',
+  primarySoft: '#DDEDD5',
   accent: '#E84B2F',
   accentSoft: '#FFE1D3',
   warning: '#B35C00',
@@ -28,22 +33,30 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  xxxl: 40,
 };
 
 export const shadows = {
-  card: {
-    elevation: 5,
+  hairline: {
+    elevation: 1,
     shadowColor: '#5B371E',
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  card: {
+    elevation: 4,
+    shadowColor: '#5B371E',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
   },
   lift: {
-    elevation: 9,
+    elevation: 8,
     shadowColor: '#4E2B12',
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
   },
 };
 
@@ -56,9 +69,10 @@ export const radii = {
 };
 
 export const gradients = {
-  app: ['#FFF8EC', '#F6E6C9', '#F7F0E3'] as const,
+  app: ['#FFF7E7', '#F5E3C5', '#FFF9ED'] as const,
   primary: ['#1E7A54', '#2E9F70', '#F4B740'] as const,
-  hero: ['#24160E', '#6C341F', '#E86C36'] as const,
+  hero: ['#20140D', '#6A321D', '#D95E32'] as const,
+  heroQuiet: ['#2B2119', '#46301E', '#91623A'] as const,
   card: ['rgba(255,255,255,0.96)', 'rgba(255,248,236,0.92)'] as const,
   danger: ['#B42318', '#E85A3F'] as const,
 };
@@ -68,3 +82,133 @@ export const typography = {
   body: 'sans-serif',
   strong: 'sans-serif-medium',
 };
+
+export const semanticColors = {
+  canvas: '#FFF9EF',
+  canvasSubtle: '#F8ECD8',
+  surface: '#FFFDF8',
+  surfaceMuted: '#F6ECD9',
+  surfacePressed: '#EFE0C8',
+  surfaceDisabled: '#EFE7DA',
+  textPrimary: '#21160E',
+  textSecondary: '#6E5B4A',
+  textTertiary: '#927B66',
+  textInverse: '#FFFDF8',
+  border: '#E5D5B9',
+  borderStrong: '#CDB58D',
+  primary: '#1D6F50',
+  primaryPressed: '#14513B',
+  primaryMuted: '#DCEBDD',
+  secondary: '#C47A2C',
+  secondaryMuted: '#F4E0C4',
+  success: '#1D6F50',
+  warning: '#A85E12',
+  danger: '#B42318',
+  dangerMuted: '#F8D8D2',
+  info: '#476D7C',
+  infoMuted: '#DCEBF0',
+  overlay: 'rgba(33, 22, 14, 0.42)',
+} as const;
+
+export const typeScale = {
+  screenTitle: {
+    fontFamily: typography.display,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '900' as const,
+  },
+  sectionTitle: {
+    fontFamily: typography.strong,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '900' as const,
+  },
+  cardTitle: {
+    fontFamily: typography.strong,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900' as const,
+  },
+  body: {
+    fontFamily: typography.body,
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '400' as const,
+  },
+  bodyStrong: {
+    fontFamily: typography.strong,
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '800' as const,
+  },
+  label: {
+    fontFamily: typography.strong,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900' as const,
+  },
+  caption: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600' as const,
+  },
+} as const;
+
+export const borders = {
+  hairline: 1,
+  regular: 1,
+  focus: 2,
+} as const;
+
+export const semanticShadows = {
+  none: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  soft: {
+    elevation: 1,
+    shadowColor: '#6E4A2B',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  card: {
+    elevation: 2,
+    shadowColor: '#6E4A2B',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+  },
+} as const;
+
+export const iconSizes = {
+  xs: 14,
+  sm: 18,
+  md: 22,
+  lg: 28,
+} as const;
+
+export const buttonHeights = {
+  sm: 40,
+  md: 48,
+  lg: 54,
+} as const;
+
+export const inputHeights = {
+  md: 52,
+  multiline: 112,
+} as const;
+
+export const contentWidths = {
+  compact: 430,
+  readable: 620,
+  tablet: 720,
+} as const;
+
+export const safeAreaSpacing = {
+  horizontal: spacing.lg,
+  top: spacing.md,
+  bottom: spacing.lg,
+  contentGap: spacing.lg,
+} as const;
