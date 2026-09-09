@@ -72,6 +72,20 @@ _Avoid_: Ingredient name string, translated ingredient
 An ingredient that cannot yet map to a Canonical Ingredient and therefore retains the user's original text.
 _Avoid_: Unknown Canonical Ingredient
 
+## Personal Recipes
+
+**Recipe Draft**:
+An editable recipe proposal created by the user or extracted by Gemini that has not yet been reviewed and explicitly saved. A Recipe Draft never participates in Local Retrieval.
+_Avoid_: Personal Recipe, imported recipe
+
+**Personal Recipe**:
+A recipe that the user explicitly saved after reviewing its required fields, whether it began as manual entry or a Recipe Draft. It participates in Local Retrieval only through an Enabled Personal Recipe Library.
+_Avoid_: Recipe Draft, Official DatasetPack recipe
+
+**Enabled Personal Recipe Library**:
+A Personal Recipe Library explicitly selected by the user to participate in Local Retrieval. Multiple personal libraries may be enabled at once; disabled libraries do not participate.
+_Avoid_: Personal Recipe Library, enabled DatasetPack
+
 ## Recipe Libraries
 
 **Base Recipe Library**:
