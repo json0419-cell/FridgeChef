@@ -9,3 +9,5 @@ The app verifies the publisher identity of the official dataset index, Official 
 ## Consequences
 
 Recipe packs installed from arbitrary URLs remain supported but are labeled as Unverified DatasetPacks and can contain data only, never scripts, native libraries, or dynamic code. Before installation, the app shows the source domain, declared total size, and unverified status. A successfully installed Unverified DatasetPack remains disabled until the user reviews the source domain, size, and risk again and explicitly enables it. Existing path, URL, size, count, staging, and hash validation still applies. Key rotation and signature versioning must be designed before the first signed production manifest is published.
+
+The release security suite covers path traversal, undeclared and oversized files, size and count limits, hash mismatches, duplicate stable IDs, malformed JSON, cancellation, interrupted transfers, and insufficient storage. Every case must fail without activating the new pack, corrupting an installed pack, or changing the user's enabled-source state.
