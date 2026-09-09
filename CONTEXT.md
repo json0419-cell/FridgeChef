@@ -1,91 +1,91 @@
-# “是啊！吃什么”领域上下文
+# FridgeChef Domain Context
 
-本上下文描述帮助用户根据现有食材快速决定一餐吃什么的核心语言。它用于区分本地决策能力、可选 AI 能力以及不同来源的菜谱内容。
+This context defines the language used by FridgeChef to help a user decide what to eat based on the ingredients they have. It distinguishes retrieval, user-facing recommendations, ingredient identity, and recipe sources.
 
-## 产品
+## Product
 
-**是啊！吃什么**：
-产品在中文商店和中文界面中的正式名称。
-_避免使用_：吃什么、FridgeChef 中文版
+**FridgeChef**:
+The official product name in English storefronts and English UI, and the stable identifier used by packages, bundles, and code.
+_Avoid_: ChiShenMe, English version of 是啊！吃什么
 
-**FridgeChef**：
-产品在英文商店和英文界面中的正式名称，也是 package、bundle 和代码中的稳定技术标识。
-_避免使用_：ChiShenMe、是啊！吃什么英文版
+**是啊！吃什么**:
+The official localized product name in Chinese storefronts and Chinese UI.
+_Avoid_: 吃什么, Chinese FridgeChef
 
-**诊断信息**：
-由用户主动复制或提交、不包含 API Key、照片、食材、饮食禁忌、个人菜谱或 AI 正文的设备与组件状态摘要。
-_避免使用_：崩溃上报、完整日志
+**Diagnostic Information**:
+A device and component status summary that the user explicitly copies or submits. It excludes API keys, photos, ingredients, dietary restrictions, personal recipes, and AI request or response bodies.
+_Avoid_: Crash report, full log
 
-## 推荐
+## Recommendations
 
-**本地检索**：
-使用已安装的 BGE-M3，根据已确认食材、用餐人数、可用时间、难度、饮食偏好和近期烹饪记录，从启用的菜谱来源中取得候选菜谱的设备端过程。
-_避免使用_：本地推荐、最终推荐
+**Local Retrieval**:
+The on-device process that uses the installed BGE-M3 model to retrieve Candidate Recipes from enabled recipe sources using Confirmed Ingredients, serving count, available time, difficulty, Taste Preferences, Dietary Restrictions, and recent cooking history.
+_Avoid_: Local Recommendation, final recommendation
 
-**推荐结果**：
-Gemini 根据本地检索得到的候选菜谱整理出的可直接使用结果；生成新一批结果需要有效 Gemini API Key 和已安装的 BGE-M3。
-_避免使用_：本地检索、候选菜谱
+**Recommendation**:
+A directly usable result that Gemini produces from Candidate Recipes returned by Local Retrieval. Generating a new batch requires a valid Gemini API key and an installed BGE-M3 model.
+_Avoid_: Local Retrieval, Candidate Recipe
 
-**调整推荐**：
-用户改变时间、口味或其他条件后，重新执行本地检索并由 Gemini 生成新一批推荐结果。
-_避免使用_：AI 优化、本地筛选
+**Adjust Recommendation**:
+Run Local Retrieval again and ask Gemini for a new Recommendation batch after the user changes time, taste, or other criteria.
+_Avoid_: AI optimization, local filtering
 
-**推荐就绪**：
-用户已同意 AI 数据披露，Gemini API Key 已通过测试，BGE-M3 已完成完整性校验和测试 embedding，并且至少有一个可用菜谱来源的状态。
-_避免使用_：设置完成、模型已下载
+**Recommendation Ready**:
+The state in which AI data consent is granted, the Gemini API key passed a live test, BGE-M3 passed integrity validation and a test embedding, and at least one recipe source is available.
+_Avoid_: Setup complete, model downloaded
 
-**候选菜谱**：
-本地检索过程取得、尚未由 Gemini 整理为推荐结果的菜谱。
-_避免使用_：推荐结果、AI 推荐
+**Candidate Recipe**:
+A recipe returned by Local Retrieval that Gemini has not yet converted into a Recommendation.
+_Avoid_: Recommendation, AI recommendation
 
-**现在就能做**：
-主要食材已全部具备，可以直接开始准备的本地推荐。
-_避免使用_：完全匹配
+**Ready to Cook**:
+A Recommendation for which every main ingredient is available.
+_Avoid_: Complete match
 
-**再买一点就能做**：
-缺少一至两种主要食材，补齐后即可准备的本地推荐。
-_避免使用_：部分匹配、近似推荐
+**Almost Ready to Cook**:
+A Recommendation that is missing one or two main ingredients and becomes actionable after those ingredients are obtained.
+_Avoid_: Partial match, approximate recommendation
 
-**饮食禁忌**：
-用户明确要求结果不得包含的食材或饮食类别，是本地推荐不可放宽的硬约束。
-_避免使用_：口味偏好、推荐标签
+**Dietary Restriction**:
+A user-declared ingredient or food category that Recommendations must exclude and that automatic fallback must never relax.
+_Avoid_: Taste Preference, recommendation tag
 
-**口味偏好**：
-用户希望优先满足但允许在结果不足时调整的口味、菜系或餐食倾向。
-_避免使用_：饮食禁忌、过敏原
+**Taste Preference**:
+A cuisine, flavor, or meal preference that affects ranking but may be relaxed when no result is available.
+_Avoid_: Dietary Restriction, allergen
 
-## 食材
+## Ingredients
 
-**已确认食材**：
-用户通过手动录入或修正照片识别结果后，明确保存到冰箱中的食材。
-_避免使用_：识别食材、扫描结果
+**Confirmed Ingredient**:
+An ingredient that the user explicitly saved after manual entry or after correcting a Photo Recognition Result.
+_Avoid_: Recognized Ingredient, scan result
 
-**照片识别结果**：
-Gemini 根据用户主动提交的照片返回、尚待用户确认或修正的食材草稿。
-_避免使用_：已确认食材、冰箱食材
+**Photo Recognition Result**:
+An editable ingredient draft returned by Gemini from a photo the user explicitly submitted.
+_Avoid_: Confirmed Ingredient, fridge ingredient
 
-**标准食材**：
-由语言无关的 canonical ingredient ID 标识，并关联中文、英文及常见别名的食材。
-_避免使用_：食材名称字符串、翻译后的食材
+**Canonical Ingredient**:
+An ingredient identified by a language-independent canonical ingredient ID and associated with Chinese, English, and common alias names.
+_Avoid_: Ingredient name string, translated ingredient
 
-**自定义食材**：
-暂时无法映射到标准食材、仍保留用户原始名称的食材。
-_避免使用_：未知标准食材
+**Custom Ingredient**:
+An ingredient that cannot yet map to a Canonical Ingredient and therefore retains the user's original text.
+_Avoid_: Unknown Canonical Ingredient
 
-## 菜谱库
+## Recipe Libraries
 
-**基础菜谱库**：
-随 App 安装、无需下载即可用于本地推荐的 300–500 道经过质量和授权检查的菜谱。
-_避免使用_：示例菜谱、默认 DatasetPack
+**Base Recipe Library**:
+The 300–500 quality-reviewed and rights-cleared recipes bundled with the app so that a recipe source is available without a separate download.
+_Avoid_: Sample recipes, default DatasetPack
 
-**官方 DatasetPack**：
-由项目方发布、用户按需下载并启用的扩展菜谱库。
-_避免使用_：基础菜谱库、内置菜谱
+**Official DatasetPack**:
+An extension recipe library published by the project and downloaded and enabled explicitly by the user.
+_Avoid_: Base Recipe Library, bundled recipes
 
-**启用的官方 DatasetPack**：
-用户明确选择参与本地推荐的官方 DatasetPack；可以同时启用多个，未启用的包不参与检索。
-_避免使用_：启动的 dataset、已下载数据集
+**Enabled Official DatasetPack**:
+An Official DatasetPack explicitly selected by the user to participate in Local Retrieval. Multiple packs may be enabled at once; downloaded but disabled packs do not participate.
+_Avoid_: Started dataset, downloaded dataset
 
-**个人菜谱库**：
-由用户创建和管理、仅保存在其设备上的菜谱集合。
-_避免使用_：官方菜谱库、自定义 DatasetPack
+**Personal Recipe Library**:
+A user-created and user-managed recipe collection stored only on the user's device.
+_Avoid_: Official recipe library, custom DatasetPack

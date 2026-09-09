@@ -2,10 +2,10 @@
 status: accepted
 ---
 
-# 统一检索所有启用的官方 DatasetPack
+# Search every enabled Official DatasetPack
 
-本地推荐统一检索用户明确启用的全部官方 `DatasetPack`，未启用的包不参与；只要存在启用的官方包，基础菜谱库就不参与候选生成，没有启用官方包时才使用基础菜谱库。所有来源的候选进入同一排序池，并按稳定菜谱 ID 或内容指纹去重，避免固定配额降低推荐相关性。
+Local Retrieval searches every Official DatasetPack the user explicitly enabled. Disabled packs do not participate. When at least one official pack is enabled, the Base Recipe Library does not contribute candidates; the base library is used normally only when no official pack is enabled. Candidates from every active source enter one ranking pool and are deduplicated by stable recipe ID or content fingerprint rather than by title.
 
-## 后果
+## Consequences
 
-检索、缓存签名和结果失效逻辑必须包含全部启用包的 ID 与版本，不能再假设只有一个 active dataset。个人菜谱与官方候选共同排序并获得轻微来源加权；界面显示菜谱来源，但来源不能保证结果入选。存在启用的官方 DatasetPack 时，正常检索不混入基础菜谱库；若启用包损坏、读取失败或全部检索超时，则明确提示并仅在本次请求中回退基础菜谱库，不擅自更改用户的启用状态。
+Retrieval, cache signatures, and result invalidation must include the ID and version of every enabled pack and cannot assume a single active dataset. Personal recipes share the ranking pool with official candidates and receive a small source boost. The UI displays recipe provenance, but provenance does not guarantee selection. If enabled packs are corrupt, unreadable, or all time out, the app explains the failure and falls back to the Base Recipe Library for that request without changing the user's enabled state.

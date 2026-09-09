@@ -2,10 +2,8 @@
 status: superseded by ADR-0003
 ---
 
-# 本地推荐是核心能力，Gemini 是可选增强
+# Local recommendations are the core capability
 
-公开版本必须在没有 Gemini API Key、网络或本地 BGE-M3 模型时，仍能根据已确认食材和基础菜谱库提供包含完整步骤的本地推荐。照片识别和 AI 优化可以调用 Gemini，但必须由用户主动触发；这一边界控制 token 成本和隐私风险，也避免第三方服务故障阻断“快速决定今晚吃什么”的核心价值。
+The public release was initially planned to provide directly usable local recommendations without a Gemini API key, network access, or a local BGE-M3 model. Photo recognition and AI refinement would have remained explicit optional actions so that third-party availability, privacy concerns, and token usage could not block the core experience.
 
-## 后果
-
-推荐页面不得以 Gemini API Key 作为展示本地结果的前置条件；基础菜谱数据必须包含可独立使用的时间、难度、份量、用量和步骤。约 2.29 GB 的 BGE-M3 模型只能作为可选的高精度本地检索能力，不能成为首次使用门槛。
+This decision was replaced by ADR-0003 after the product scope changed to require both Gemini and BGE-M3 for every newly generated recommendation batch.
