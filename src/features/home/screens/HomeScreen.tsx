@@ -208,9 +208,9 @@ export function HomeScreen({ navigation }: Props) {
   const openFridge = () => navigation.navigate('FridgeStack', { screen: 'Fridge' });
   const openManualAdd = () => navigation.navigate('FridgeStack', { screen: 'AddIngredient', params: { mode: 'manual' }, initial: false });
   const openPhotoScan = () => navigation.navigate('FridgeStack', { screen: 'AddIngredient', params: { mode: 'photo' }, initial: false });
-  const openRecommendations = () => navigation.navigate('Recommendations');
+  const openRecommendations = () => navigation.navigate('RecommendationsStack', { screen: 'Recommendations' });
   const openSettings = () => navigation.navigate('Settings');
-  const openRecipeLibrary = () => navigation.navigate('RecipesStack', { screen: 'DatasetLibrary' });
+  const openRecipeLibrary = () => navigation.navigate('MyStack', { screen: 'DatasetLibrary' });
   const openRecipePreview = (preview: HomeRecipePreview) => {
     if (preview.source === 'personal' && preview.recipeId && preview.libraryId) {
       navigation.navigate('RecipeDetail', { recipeId: preview.recipeId, source: 'personal', libraryId: preview.libraryId });

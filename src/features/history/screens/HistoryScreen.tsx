@@ -75,7 +75,10 @@ export function HistoryScreen({ navigation }: Props) {
             <Clock size={48} color="#E5E5E5" strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
             <Text style={styles.emptyText}>{emptyHistoryText(language)}</Text>
-            <ActionButton title={t('history.goPage')} onPress={() => navigation.navigate('HomeStack', { screen: 'Recommendations', initial: false })} />
+            <ActionButton
+              title={t('history.goPage')}
+              onPress={() => navigation.navigate('RecommendationsStack', { screen: 'Recommendations', initial: false })}
+            />
           </View>
         }
         renderItem={({ item }) =>

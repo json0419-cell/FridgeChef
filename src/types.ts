@@ -289,7 +289,6 @@ export type RecipeDetailParams = {
 
 export type HomeStackParamList = {
   Home: undefined;
-  Recommendations: undefined;
   RecipeDetail: RecipeDetailParams;
 };
 
@@ -312,11 +311,26 @@ export type HistoryStackParamList = {
   RecipeDetail: RecipeDetailParams;
 };
 
+export type RecommendationsStackParamList = {
+  Recommendations: undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type MyStackParamList = {
+  My: undefined;
+  DatasetLibrary: undefined;
+  UserRecipeLibraries: undefined;
+  UserRecipeLibraryDetail: { libraryId: string };
+  AddUserRecipe: { libraryId?: string; recipeId?: string } | undefined;
+  History: undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
 export type MainTabParamList = {
   HomeStack: NavigatorScreenParams<HomeStackParamList> | undefined;
   FridgeStack: NavigatorScreenParams<FridgeStackParamList> | undefined;
-  RecipesStack: NavigatorScreenParams<RecipesStackParamList> | undefined;
-  HistoryStack: NavigatorScreenParams<HistoryStackParamList> | undefined;
+  RecommendationsStack: NavigatorScreenParams<RecommendationsStackParamList> | undefined;
+  MyStack: NavigatorScreenParams<MyStackParamList> | undefined;
 };
 
 export type RootNativeStackParamList = {
@@ -337,15 +351,19 @@ export type FridgeStackScreenProps<T extends keyof FridgeStackParamList> = Compo
   CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'FridgeStack'>, NativeStackScreenProps<RootNativeStackParamList>>
 >;
 
-export type RecipesStackScreenProps<T extends keyof RecipesStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<RecipesStackParamList, T>,
-  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'RecipesStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+export type RecommendationsStackScreenProps<T extends keyof RecommendationsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<RecommendationsStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'RecommendationsStack'>, NativeStackScreenProps<RootNativeStackParamList>>
 >;
 
-export type HistoryStackScreenProps<T extends keyof HistoryStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<HistoryStackParamList, T>,
-  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'HistoryStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+export type MyStackScreenProps<T extends keyof MyStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<MyStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'MyStack'>, NativeStackScreenProps<RootNativeStackParamList>>
 >;
+
+export type RecipesStackScreenProps<T extends keyof RecipesStackParamList> = MyStackScreenProps<T>;
+
+export type HistoryStackScreenProps<T extends keyof HistoryStackParamList> = MyStackScreenProps<T>;
 
 export type SettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'Settings'>;
 export type PrivacyPolicyScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'PrivacyPolicy'>;

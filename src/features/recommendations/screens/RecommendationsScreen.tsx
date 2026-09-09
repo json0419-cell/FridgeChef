@@ -21,7 +21,7 @@ import { getApiKey, getSettings } from '../../../storage/settingsStorage';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
 import type {
   AppSettings,
-  HomeStackScreenProps,
+  RecommendationsStackScreenProps,
   Ingredient,
   InstalledDataset,
   RagRecommendation,
@@ -30,7 +30,7 @@ import type {
   UserRecipeLibrary,
 } from '../../../types';
 
-type Props = HomeStackScreenProps<'Recommendations'>;
+type Props = RecommendationsStackScreenProps<'Recommendations'>;
 
 type RecommendationListItem = { kind: 'refined'; recommendation: RefinedRagRecommendation };
 type TFunction = ReturnType<typeof useI18n>['t'];
@@ -727,7 +727,7 @@ export function RecommendationsScreen({ navigation }: Props) {
                   <ActionButton
                     title={t('recommendations.goDataset')}
                     variant="secondary"
-                    onPress={() => navigation.navigate('RecipesStack', { screen: 'DatasetLibrary' })}
+                    onPress={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
                   />
                 ) : null}
                 {ragResult.reason === 'no_model' ? (
