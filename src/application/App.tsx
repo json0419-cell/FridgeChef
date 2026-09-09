@@ -153,7 +153,7 @@ function MainTabsNavigator() {
               numberOfLines={2}
               style={{ color, fontSize: 12, fontWeight: '600', lineHeight: 15, textAlign: 'center' }}
             >
-              {children}
+              {route.name === 'RecommendationsStack' ? t('nav.recommendationIdeas') : children}
             </Text>
           ),
           tabBarStyle: {
