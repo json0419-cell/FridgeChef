@@ -3,31 +3,40 @@
   "version": "1.0.0",
   "main": "index.ts",
   "onnxruntimeExtensionsEnabled": "false",
+  "expo": {
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      }
+    }
+  },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.18.14",
     "@react-navigation/native": "^7.3.3",
     "@react-navigation/native-stack": "^7.17.5",
-    "expo": "~56.0.12",
-    "expo-asset": "~56.0.17",
-    "expo-dev-client": "~56.0.20",
-    "expo-file-system": "~56.0.8",
-    "expo-image-picker": "~56.0.18",
-    "expo-linear-gradient": "~56.0.4",
-    "expo-secure-store": "~56.0.4",
-    "expo-sqlite": "~56.0.5",
-    "expo-status-bar": "~56.0.4",
-    "expo-system-ui": "~56.0.5",
+    "expo": "^57.0.17",
+    "expo-asset": "~57.0.16",
+    "expo-dev-client": "~57.0.18",
+    "expo-file-system": "~57.0.6",
+    "expo-image-picker": "~57.0.15",
+    "expo-linear-gradient": "~57.0.1",
+    "expo-secure-store": "~57.0.3",
+    "expo-sqlite": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.3",
     "lucide-react-native": "^1.28.0",
     "onnxruntime-react-native": "^1.24.3",
     "react": "19.2.3",
-    "react-native": "0.85.3",
+    "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.2"
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "@types/react": "~19.2.2",
-    "eas-cli": "^20.5.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -39,6 +48,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test",
+    "test:types": "tsc --noEmit -p tsconfig.test.json",
     "preprocess:rag": "node scripts/preprocess-recipes-rag.cjs",
     "postinstall": "node scripts/patch-react-native-gradle-plugin.cjs && node scripts/patch-onnxruntime-react-native.cjs"
   },

@@ -1,11 +1,9 @@
 import { extractGeminiText, extractJsonObject } from './json';
-import { buildGeminiGenerateContentEndpoint } from './geminiConfig';
+import { fetchGeminiGenerateContent } from './geminiClient';
 import { buildRecommendationRefinerPrompt } from './recommendationRefinerPrompt';
 import type { AppSettings, Ingredient, RagRecommendation, RefinedRagRecommendation } from '../types';
 
 type OutputLanguage = 'zh' | 'en';
-
-const PROVIDER_REQUEST_TIMEOUT_MS = 25000;
 
 export interface RecommendationRefinerInput {
   apiKey: string;
@@ -42,12 +40,7 @@ async function refineWithGemini(
   prompt: string,
   sourceRecommendations: RagRecommendation[],
 ): Promise<RefinedRagRecommendation[]> {
-  const response = await fetchWithTimeout(buildGeminiGenerateContentEndpoint(apiKey), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await fetchGeminiGenerateContent(apiKey, {
       contents: [
         {
           parts: [{ text: prompt }],
@@ -58,31 +51,10 @@ async function refineWithGemini(
         temperature: 0.2,
         maxOutputTokens: 2600,
       },
-    }),
-  });
+    });
 
   const data = await readJsonResponse(response, 'Gemini 推荐整理失败');
   return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
-}
-
-async function fetchWithTimeout(input: string, init: RequestInit) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error('AI 调用超时。');
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 function parseRefinedRecommendationsJson(
@@ -223,10 +195,6 @@ function readProviderError(data: unknown) {
 
   const message = (error as Record<string, unknown>).message;
   return typeof message === 'string' ? message : null;
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

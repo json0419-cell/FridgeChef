@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    "tests/**/*.ts",
+    "src/datasets/dataset-manifest.ts",
+    "src/rag/model/model-manifest.ts",
+    "src/downloads/http-range.ts",
+    "src/downloads/pack-security.ts",
+    "src/downloads/streaming-sha256.ts",
+    "src/ai/geminiConfig.ts"
+  ],
+  "exclude": []
+}

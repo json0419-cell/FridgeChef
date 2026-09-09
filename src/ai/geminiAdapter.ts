@@ -1,5 +1,5 @@
 import { buildFoodRecognitionPrompt } from './prompt';
-import { buildGeminiGenerateContentEndpoint } from './geminiConfig';
+import { fetchGeminiGenerateContent } from './geminiClient';
 import { extractGeminiText, extractJsonObject, parseRecognitionJson } from './json';
 import type { RecognitionResult, UserRecipeDifficulty } from '../types';
 
@@ -36,12 +36,7 @@ export async function recognizeWithGemini({
   mimeType,
   outputLanguage = 'zh',
 }: GeminiRecognitionInput): Promise<RecognitionResult> {
-  const response = await fetch(buildGeminiGenerateContentEndpoint(apiKey), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await fetchGeminiGenerateContent(apiKey, {
       contents: [
         {
           parts: [
@@ -59,8 +54,7 @@ export async function recognizeWithGemini({
         response_mime_type: 'application/json',
         temperature: 0,
       },
-    }),
-  });
+    }, { timeoutMs: 60_000 });
 
   const data = await readJsonResponse(response, 'Gemini 识别失败');
   return parseRecognitionJson(extractGeminiText(data));
@@ -71,12 +65,7 @@ export async function generateRecipeFromYouTubeWithGemini({
   youtubeUrl,
   outputLanguage = 'zh',
 }: GeminiYoutubeRecipeInput): Promise<GeneratedYoutubeRecipe> {
-  const response = await fetch(buildGeminiGenerateContentEndpoint(apiKey), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await fetchGeminiGenerateContent(apiKey, {
       contents: [
         {
           parts: [
@@ -93,8 +82,7 @@ export async function generateRecipeFromYouTubeWithGemini({
         response_mime_type: 'application/json',
         temperature: 0.1,
       },
-    }),
-  });
+    }, { timeoutMs: 90_000 });
 
   const data = await readJsonResponse(response, 'Gemini YouTube 菜谱生成失败');
   return parseYoutubeRecipeJson(extractGeminiText(data), youtubeUrl);
@@ -146,12 +134,7 @@ function buildYoutubeRecipePrompt(outputLanguage: OutputLanguage) {
 }
 
 export async function testGeminiConnection(apiKey: string): Promise<void> {
-  const response = await fetch(buildGeminiGenerateContentEndpoint(apiKey), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await fetchGeminiGenerateContent(apiKey, {
       contents: [
         {
           parts: [{ text: '只返回严格 JSON：{"ok":true}' }],
@@ -161,8 +144,7 @@ export async function testGeminiConnection(apiKey: string): Promise<void> {
         response_mime_type: 'application/json',
         temperature: 0,
       },
-    }),
-  });
+    });
 
   await readJsonResponse(response, 'Gemini 连接测试失败');
 }

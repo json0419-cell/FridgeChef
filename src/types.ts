@@ -322,6 +322,7 @@ export type MainTabParamList = {
 export type RootNativeStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Settings: undefined;
+  PrivacyPolicy: undefined;
 };
 
 export type RootStackParamList = RootNativeStackParamList;
@@ -347,6 +348,7 @@ export type HistoryStackScreenProps<T extends keyof HistoryStackParamList> = Com
 >;
 
 export type SettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'Settings'>;
+export type PrivacyPolicyScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'PrivacyPolicy'>;
 
 export type RecipeDetailScreenProps = {
   route: RouteProp<{ RecipeDetail: RecipeDetailParams }, 'RecipeDetail'>;
