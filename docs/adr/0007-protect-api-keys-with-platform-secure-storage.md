@@ -10,6 +10,6 @@ Ordinary local product data, including ingredients, preferences, history, and pe
 
 ## Consequences
 
-The API key entry UI masks the key by default and supports explicit paste, reveal, replace, test, and delete actions. Key values must be redacted from errors and network diagnostics. Migration from any existing insecure key location must move the value into secure storage and remove the original only after the secure write succeeds; failed migration keeps Recommendation locked and explains how the user can enter the key again.
+The API key entry UI masks the key by default and supports explicit paste, reveal, replace, test, and delete actions. Credential entry and reveal screens prevent system screenshots and redact their content from the recent-task preview; this protection does not apply to ordinary recipe, recommendation, or diagnostic screens. Key values must be redacted from errors and network diagnostics. Migration from any existing insecure key location must move the value into secure storage and remove the original only after the secure write succeeds; failed migration keeps Recommendation locked and explains how the user can enter the key again.
 
 Removing the API key immediately makes the app not Recommendation Ready but does not delete ingredients, recipes, history, downloaded artifacts, or already cached Recommendations. Clearing all user data includes deleting the secure credential. Future iOS support must use the equivalent platform keychain boundary rather than reproducing an Android-specific storage API.
