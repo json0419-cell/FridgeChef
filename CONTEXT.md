@@ -79,12 +79,16 @@ The 300–500 quality-reviewed and rights-cleared recipes bundled with the app s
 _Avoid_: Sample recipes, default DatasetPack
 
 **Official DatasetPack**:
-An extension recipe library published by the project and downloaded and enabled explicitly by the user.
+An extension recipe library whose manifest signature verifies against the project's bundled public key and that the user explicitly downloads and enables.
 _Avoid_: Base Recipe Library, bundled recipes
 
 **Enabled Official DatasetPack**:
 An Official DatasetPack explicitly selected by the user to participate in Local Retrieval. Multiple packs may be enabled at once; downloaded but disabled packs do not participate.
 _Avoid_: Started dataset, downloaded dataset
+
+**Unverified DatasetPack**:
+A data-only recipe pack installed from an arbitrary URL whose publisher identity is not trusted by the app, even when its declared files pass transport, path, size, and hash validation.
+_Avoid_: Official DatasetPack, unsafe executable
 
 **Personal Recipe Library**:
 A user-created and user-managed recipe collection stored only on the user's device.
