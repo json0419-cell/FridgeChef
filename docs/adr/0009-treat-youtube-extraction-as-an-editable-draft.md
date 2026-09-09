@@ -13,3 +13,5 @@ The review form requires a title, main ingredients with usable amounts, seasonin
 Only public `youtube.com` and `youtu.be` URLs supported by Gemini are accepted. Private, restricted, deleted, inaccessible, or unreliable videos produce an actionable error and a path to manual recipe entry. The app does not download videos, use third-party circumvention services, bypass access controls, or fill missing recipe facts with silent guesses.
 
 YouTube extraction is optional and failure is isolated to that operation. An extraction error does not disable the fridge, existing recipe sources, or Recommendations. Likewise, an Unverified DatasetPack installation or activation failure disables only that source and exposes redacted Diagnostic Information.
+
+Release validation uses at least 20 fixed public cooking videos covering Chinese and English content, short and long formats, and varied presentation styles. At least 80 percent must produce a structurally complete editable Recipe Draft. Every failure must be recoverable, and no generated result may save without explicit user review. These live Gemini checks run manually before release rather than in CI.
