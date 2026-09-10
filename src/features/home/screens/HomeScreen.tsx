@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ComponentType } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { AlertTriangle, ChefHat, ChevronRight, Clock3, Refrigerator, Settings2, Sparkles } from 'lucide-react-native';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { listInstalledDatasets } from '../../../datasets/datasetRegistry';
 import { listRecipes } from '../../../db/recipesRepository';
@@ -166,7 +166,7 @@ export function HomeScreen({ navigation }: Props) {
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.canvas }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ gap: spacing.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112 }}
+        contentContainerStyle={{ flexGrow: 1, gap: spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl }}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -180,103 +180,111 @@ export function HomeScreen({ navigation }: Props) {
           <IconButton colors={colors} icon={Settings2} label={t('nav.settings')} onPress={openSettings} />
         </View>
 
-        <View style={{ alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm }}>
-          {!hasRecommendations ? (
-            <View style={{ width: 104, height: 104, borderRadius: 32, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary }}>
-              <Sparkles color={colors.onPrimary} size={42} strokeWidth={1.7} />
-            </View>
-          ) : null}
-          <View style={{ alignItems: 'center', gap: spacing.sm }}>
-            <Text selectable style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 41, textAlign: 'center' }}>
-              {t('home.title')}
-            </Text>
-            <Text selectable style={{ maxWidth: 360, color: colors.textSecondary, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>
-              {t('home.minimalSubtitle')}
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ gap: spacing.sm }}>
-          <Pressable
-            accessibilityHint={t('home.generateHint')}
-            accessibilityLabel={hasRecommendations ? t('home.regenerate') : t('home.generate')}
-            accessibilityRole="button"
-            accessibilityState={{ busy: snapshot.loading, disabled: snapshot.loading }}
-            disabled={snapshot.loading}
-            onPress={requestRecommendations}
-            style={({ pressed }) => ({
-              minHeight: 62,
-              borderRadius: radii.md,
-              borderCurve: 'continuous',
-              backgroundColor: pressed ? colors.primaryPressed : colors.primary,
-              paddingHorizontal: spacing.lg,
-              paddingVertical: spacing.md,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.md,
-              opacity: snapshot.loading ? 0.72 : 1,
-            })}
-          >
-            {snapshot.loading ? <ActivityIndicator color={colors.onPrimary} /> : <Sparkles color={colors.onPrimary} size={22} strokeWidth={2} />}
-            <Text style={{ flex: 1, color: colors.onPrimary, fontSize: 17, fontWeight: '800', lineHeight: 23 }}>
-              {hasRecommendations ? t('home.regenerate') : t('home.generate')}
-            </Text>
-            <ChevronRight color={colors.onPrimary} size={21} strokeWidth={2.3} />
-          </Pressable>
-          <Text selectable style={{ color: colors.textTertiary, fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
-            {t('home.geminiUsageHint')}
-          </Text>
-          <Pressable
-            accessibilityLabel={getFridgeButtonLabel(snapshot.ingredients.length, t)}
-            accessibilityRole="button"
-            onPress={openFridge}
-            style={({ pressed }) => ({
-              minHeight: 54,
-              borderRadius: radii.md,
-              borderCurve: 'continuous',
-              borderWidth: 1,
-              borderColor: colors.borderStrong,
-              backgroundColor: pressed ? colors.surfacePressed : colors.surface,
-              paddingHorizontal: spacing.lg,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: spacing.sm,
-            })}
-          >
-            <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
-            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
-              {getFridgeButtonLabel(snapshot.ingredients.length, t)}
-            </Text>
-          </Pressable>
-        </View>
-
-        {hasRecommendations ? (
-          <View style={{ gap: spacing.md }}>
-            <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
-              <Text selectable style={{ flex: 1, color: colors.textPrimary, fontSize: 20, fontWeight: '900', lineHeight: 26 }}>
-                {t('home.todayInspiration')}
+        <View style={{ flex: 1, justifyContent: 'center', gap: spacing.xl }}>
+          <View style={{ alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm }}>
+            {!hasRecommendations ? (
+              <View style={{ width: 104, height: 104, borderRadius: 32, borderCurve: 'continuous', overflow: 'hidden' }}>
+                <Image
+                  accessibilityLabel={t('home.brandMark')}
+                  accessible
+                  resizeMode="cover"
+                  source={require('../../../../assets/icon.png')}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+            ) : null}
+            <View style={{ alignItems: 'center', gap: spacing.sm }}>
+              <Text selectable style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 41, textAlign: 'center' }}>
+                {t('home.title')}
               </Text>
-              {showPreviousLabel ? (
-                <View style={{ borderRadius: 999, backgroundColor: colors.accentMuted, paddingHorizontal: 10, paddingVertical: 6 }}>
-                  <Text selectable style={{ color: colors.warning, fontSize: 12, fontWeight: '800', lineHeight: 16 }}>
-                    {snapshot.cacheVisibility === 'stale' ? t('home.mayNotMatch') : t('home.previousRecommendations')}
-                  </Text>
+              <Text selectable style={{ maxWidth: 360, color: colors.textSecondary, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>
+                {t('home.minimalSubtitle')}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ gap: spacing.sm }}>
+            <Pressable
+              accessibilityHint={t('home.generateHint')}
+              accessibilityLabel={hasRecommendations ? t('home.regenerate') : t('home.generate')}
+              accessibilityRole="button"
+              accessibilityState={{ busy: snapshot.loading, disabled: snapshot.loading }}
+              disabled={snapshot.loading}
+              onPress={requestRecommendations}
+              style={({ pressed }) => ({
+                minHeight: 62,
+                borderRadius: radii.md,
+                borderCurve: 'continuous',
+                backgroundColor: pressed ? colors.primaryPressed : colors.primary,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                opacity: snapshot.loading ? 0.72 : 1,
+              })}
+            >
+              {snapshot.loading ? <ActivityIndicator color={colors.onPrimary} /> : <Sparkles color={colors.onPrimary} size={22} strokeWidth={2} />}
+              <Text style={{ flex: 1, color: colors.onPrimary, fontSize: 17, fontWeight: '800', lineHeight: 23 }}>
+                {hasRecommendations ? t('home.regenerate') : t('home.generate')}
+              </Text>
+              <ChevronRight color={colors.onPrimary} size={21} strokeWidth={2.3} />
+            </Pressable>
+            <Text selectable style={{ color: colors.textTertiary, fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
+              {t('home.geminiUsageHint')}
+            </Text>
+            <Pressable
+              accessibilityLabel={getFridgeButtonLabel(snapshot.ingredients.length, t)}
+              accessibilityRole="button"
+              onPress={openFridge}
+              style={({ pressed }) => ({
+                minHeight: 54,
+                borderRadius: radii.md,
+                borderCurve: 'continuous',
+                borderWidth: 1,
+                borderColor: colors.borderStrong,
+                backgroundColor: pressed ? colors.surfacePressed : colors.surface,
+                paddingHorizontal: spacing.lg,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.sm,
+              })}
+            >
+              <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
+              <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
+                {getFridgeButtonLabel(snapshot.ingredients.length, t)}
+              </Text>
+            </Pressable>
+          </View>
+
+          {hasRecommendations ? (
+            <View style={{ gap: spacing.md }}>
+              <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
+                <Text selectable style={{ flex: 1, color: colors.textPrimary, fontSize: 20, fontWeight: '900', lineHeight: 26 }}>
+                  {t('home.todayInspiration')}
+                </Text>
+                {showPreviousLabel ? (
+                  <View style={{ borderRadius: 999, backgroundColor: colors.accentMuted, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Text selectable style={{ color: colors.warning, fontSize: 12, fontWeight: '800', lineHeight: 16 }}>
+                      {snapshot.cacheVisibility === 'stale' ? t('home.mayNotMatch') : t('home.previousRecommendations')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <FeaturedRecommendationCard colors={colors} recommendation={snapshot.recommendations[0]} t={t} onPress={() => openRecommendation(snapshot.recommendations[0])} />
+
+              {snapshot.recommendations.length > 1 ? (
+                <View style={{ flexDirection: stackCompactCards ? 'column' : 'row', gap: spacing.md }}>
+                  {snapshot.recommendations.slice(1).map((recommendation) => (
+                    <CompactRecommendationCard colors={colors} key={recommendation.id} recommendation={recommendation} t={t} onPress={() => openRecommendation(recommendation)} />
+                  ))}
                 </View>
               ) : null}
             </View>
-
-            <FeaturedRecommendationCard colors={colors} recommendation={snapshot.recommendations[0]} t={t} onPress={() => openRecommendation(snapshot.recommendations[0])} />
-
-            {snapshot.recommendations.length > 1 ? (
-              <View style={{ flexDirection: stackCompactCards ? 'column' : 'row', gap: spacing.md }}>
-                {snapshot.recommendations.slice(1).map((recommendation) => (
-                  <CompactRecommendationCard colors={colors} key={recommendation.id} recommendation={recommendation} t={t} onPress={() => openRecommendation(recommendation)} />
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+          ) : null}
+        </View>
       </ScrollView>
 
       <HomePromptModal
