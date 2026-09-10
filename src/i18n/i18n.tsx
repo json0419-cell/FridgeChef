@@ -631,7 +631,7 @@ const en: Record<TranslationKey, string> = {
   'home.eyebrow': 'FRIDGECHEF',
   'home.title': 'FridgeChef',
   'home.brandMark': 'FridgeChef icon',
-  'home.minimalSubtitle': 'Turn the ingredients in your fridge into three practical dinner ideas.',
+  'home.minimalSubtitle': 'We recommend suitable recipes based on the ingredients you have.',
   'home.generate': 'Get recipe recommendations',
   'home.regenerate': 'Recommend again',
   'home.generateHint': 'Open Recommendations and explicitly generate a new batch',
