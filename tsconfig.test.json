@@ -5,6 +5,7 @@
   },
   "include": [
     "tests/**/*.ts",
+    "src/features/recommendations/recommendation-cache-policy.ts",
     "src/datasets/dataset-manifest.ts",
     "src/rag/model/model-manifest.ts",
     "src/downloads/http-range.ts",

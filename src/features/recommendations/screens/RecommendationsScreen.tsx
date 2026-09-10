@@ -7,10 +7,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { refineRagRecommendationsWithProvider } from '../../../ai/recommendationRefiner';
-import { listInstalledDatasets } from '../../../datasets/datasetRegistry';
-import { getRecentCookedRecipeIds, markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
-import { listIngredients } from '../../../db/ingredientsRepository';
-import { listUserRecipeLibraries } from '../../../db/userRecipesRepository';
+import { markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { downloadEmbeddingModelPack, type ModelDownloadProgress } from '../../../rag/model/modelPack';
@@ -19,15 +16,17 @@ import { loadRecommendationCache, saveRecommendationCache } from '../../../stora
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../../../storage/recommendationTagStorage';
 import { getApiKey, getSettings } from '../../../storage/settingsStorage';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { classifyRecommendationCache } from '../recommendation-cache-policy';
+import {
+  getRecommendationInputSnapshot,
+  normalizeRecommendationSignatureText as normalizeSignatureText,
+} from '../recommendation-input';
 import type {
   AppSettings,
   RecommendationsStackScreenProps,
-  Ingredient,
-  InstalledDataset,
   RagRecommendation,
   RefinedRagRecommendation,
   UserRecipeDifficulty,
-  UserRecipeLibrary,
 } from '../../../types';
 
 type Props = RecommendationsStackScreenProps<'Recommendations'>;
@@ -90,7 +89,7 @@ const REQUEST_TAGS_EN = [
   'Less cleanup',
 ];
 
-export function RecommendationsScreen({ navigation }: Props) {
+export function RecommendationsScreen({ navigation, route }: Props) {
   const { language, t } = useI18n();
   const { showFeedback } = useFeedback();
   const insets = useSafeAreaInsets();
@@ -106,6 +105,7 @@ export function RecommendationsScreen({ navigation }: Props) {
   const [recommendationRequest, setRecommendationRequestState] = useState('');
   const [requestTags, setRequestTags] = useState(() => (language === 'en' ? REQUEST_TAGS_EN : REQUEST_TAGS_ZH));
   const [newRequestTag, setNewRequestTag] = useState('');
+  const [highlightedRecommendationId, setHighlightedRecommendationId] = useState<string | null>(null);
   const [expandedRequestSections, setExpandedRequestSections] = useState<Record<RequestTagCategoryKey, boolean>>({
     cuisine: false,
     meal: false,
@@ -119,6 +119,8 @@ export function RecommendationsScreen({ navigation }: Props) {
   const cacheInputSignatureRef = useRef<string | null>(null);
   const recommendationRequestRef = useRef('');
   const activeRecommendationRequestRef = useRef('');
+  const handledGenerationRequestRef = useRef<string | null>(null);
+  const listRef = useRef<FlatList<RecommendationListItem>>(null);
 
   useEffect(() => {
     navigation.setOptions({
@@ -184,13 +186,17 @@ export function RecommendationsScreen({ navigation }: Props) {
 
   const hydrateFromCache = useCallback(async () => {
     const extraPreference = getCurrentRecommendationRequest();
-    const [cache, snapshot, apiKey] = await Promise.all([
+    const [cache, snapshot] = await Promise.all([
       loadRecommendationCache(),
       getRecommendationInputSnapshot(language, extraPreference),
-      getApiKey('gemini'),
     ]);
 
-    if (!apiKey || !cache || cache.language !== language || cache.inputSignature !== snapshot.inputSignature) {
+    if (!cache) {
+      return false;
+    }
+
+    const cacheVisibility = classifyRecommendationCache(cache, snapshot.inputSignature, language);
+    if (cacheVisibility === 'hidden') {
       return false;
     }
 
@@ -202,23 +208,18 @@ export function RecommendationsScreen({ navigation }: Props) {
     activeRecommendationRequestRef.current = extraPreference;
     hasLoadedOnceRef.current = true;
     setHasLoadedOnce(true);
+    setRefineMessage(cacheVisibility === 'stale' ? t('recommendations.cacheInputsChanged') : t('recommendations.cached'));
     return true;
-  }, [getCurrentRecommendationRequest, language]);
+  }, [getCurrentRecommendationRequest, language, t]);
 
-  const loadRecommendations = useCallback(async ({ replace = false }: { replace?: boolean } = {}) => {
+  const loadRecommendations = useCallback(async () => {
     if (loadingRef.current) {
       return;
     }
 
     loadingRef.current = true;
-    const initialLoad = !hasLoadedOnceRef.current;
     setLoading(true);
     setRefineMessage(null);
-
-    if (initialLoad || replace) {
-      setRefinedRecommendations([]);
-      setRagResult(null);
-    }
 
     try {
       const extraPreference = getCurrentRecommendationRequest();
@@ -230,9 +231,13 @@ export function RecommendationsScreen({ navigation }: Props) {
       if (!apiKey) {
         cacheInputSignatureRef.current = null;
         setIngredientCount(ingredients.length);
-        setRefinedRecommendations([]);
-        setRagResult(null);
         setRefineMessage(t('recommendations.needGeminiKey'));
+        return;
+      }
+
+      if (ingredients.length === 0) {
+        setIngredientCount(0);
+        setRefineMessage(t('recommendations.fridgeEmptyText'));
         return;
       }
 
@@ -261,7 +266,6 @@ export function RecommendationsScreen({ navigation }: Props) {
       }
 
       if (rag.mode === 'unavailable') {
-        setRefinedRecommendations([]);
         return;
       }
 
@@ -298,11 +302,9 @@ export function RecommendationsScreen({ navigation }: Props) {
       } catch (error) {
         console.warn('Gemini recommendation refinement failed', error);
         const message = formatGeminiRecommendationError(error, t);
-        setRefinedRecommendations([]);
         setRefineMessage(message);
       }
     } catch (error) {
-      setRefinedRecommendations([]);
       setRefineMessage(t('recommendations.refreshFailed', { message: formatError(error, t) }));
     } finally {
       loadingRef.current = false;
@@ -315,7 +317,7 @@ export function RecommendationsScreen({ navigation }: Props) {
   const refreshRecommendations = useCallback(async () => {
     sentRagCandidateKeysRef.current = new Set();
     dismissedRecommendationKeysRef.current = new Set();
-    await loadRecommendations({ replace: true });
+    await loadRecommendations();
   }, [loadRecommendations]);
 
   const loadMoreRecommendations = useCallback(async ({ replace = false, silent = false }: { replace?: boolean; silent?: boolean } = {}) => {
@@ -340,6 +342,15 @@ export function RecommendationsScreen({ navigation }: Props) {
         if (!silent) {
           setRefineMessage(t('recommendations.needGeminiKey'));
           showFeedback({ tone: 'error', title: t('recommendations.emptyTitle'), message: t('recommendations.needGeminiKey') });
+        }
+        return;
+      }
+
+      if (ingredients.length === 0) {
+        setIngredientCount(0);
+        if (!silent) {
+          setRefineMessage(t('recommendations.fridgeEmptyText'));
+          showFeedback({ tone: 'info', title: t('recommendations.fridgeEmptyTitle'), message: t('recommendations.fridgeEmptyText') });
         }
         return;
       }
@@ -540,26 +551,32 @@ export function RecommendationsScreen({ navigation }: Props) {
       let active = true;
 
       void (async () => {
-        if (hasLoadedOnceRef.current) {
-          const snapshot = await getRecommendationInputSnapshot(language, getCurrentRecommendationRequest());
-          if (active && cacheInputSignatureRef.current !== snapshot.inputSignature) {
-            sentRagCandidateKeysRef.current = new Set();
-            dismissedRecommendationKeysRef.current = new Set();
-            await loadRecommendations({ replace: true });
+        const generationRequestId = route.params?.generationRequestId;
+        if (generationRequestId && handledGenerationRequestRef.current !== generationRequestId) {
+          handledGenerationRequestRef.current = generationRequestId;
+          await hydrateFromCache();
+          if (active) {
+            await refreshRecommendations();
+            navigation.setParams({ generationRequestId: undefined });
           }
           return;
         }
 
-        const restored = await hydrateFromCache();
-        if (!restored && active) {
-          await loadRecommendations();
+        if (!hasLoadedOnceRef.current) {
+          await hydrateFromCache();
+          return;
+        }
+
+        const snapshot = await getRecommendationInputSnapshot(language, getCurrentRecommendationRequest());
+        if (active && cacheInputSignatureRef.current !== snapshot.inputSignature) {
+          setRefineMessage(t('recommendations.cacheInputsChanged'));
         }
       })();
 
       return () => {
         active = false;
       };
-    }, [getCurrentRecommendationRequest, hydrateFromCache, loadRecommendations]),
+    }, [getCurrentRecommendationRequest, hydrateFromCache, language, navigation, refreshRecommendations, route.params?.generationRequestId, t]),
   );
 
   const installOnnxModel = async () => {
@@ -589,7 +606,11 @@ export function RecommendationsScreen({ navigation }: Props) {
       });
       const settings = await getSettings();
       showFeedback({ tone: 'success', title: t('recommendations.markedCookedTitle'), message: t('recommendations.markedCookedBody', { title, days: settings.recentHistoryDays }) });
-      await refreshRecommendations();
+      setRefinedRecommendations((current) => {
+        const next = current.filter((item) => normalizeRecipeId(item.recipeId ?? item.id) !== normalizedRecipeId);
+        persistRecommendationCache(next, ragResult, ingredientCount);
+        return next;
+      });
     } catch (error) {
       showFeedback({ tone: 'error', title: t('recommendations.recordFailed'), message: formatError(error, t) });
     }
@@ -603,6 +624,28 @@ export function RecommendationsScreen({ navigation }: Props) {
   const selectedRequestTags = parseRecommendationRequestTags(recommendationRequest);
   const requestTagCategories = buildRequestTagCategories(requestTags, language);
   const fixedActionPaddingBottom = Math.max(insets.bottom, 12);
+
+  useEffect(() => {
+    const focusRecommendationId = route.params?.focusRecommendationId;
+    if (!focusRecommendationId || listData.length === 0) {
+      return;
+    }
+
+    const index = listData.findIndex((item) => item.recommendation.id === focusRecommendationId);
+    if (index < 0) {
+      navigation.setParams({ focusRecommendationId: undefined });
+      return;
+    }
+
+    const scrollTimer = setTimeout(() => {
+      setHighlightedRecommendationId(focusRecommendationId);
+      listRef.current?.scrollToIndex({ animated: true, index, viewPosition: 0.2 });
+      navigation.setParams({ focusRecommendationId: undefined });
+      setTimeout(() => setHighlightedRecommendationId(null), 1600);
+    }, 120);
+
+    return () => clearTimeout(scrollTimer);
+  }, [listData.length, navigation, route.params?.focusRecommendationId]);
 
   if (loading && !hasLoadedOnce) {
     return (
@@ -619,10 +662,14 @@ export function RecommendationsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.screen}>
       <FlatList
+        ref={listRef}
         data={listData}
         keyExtractor={(item) => item.recommendation.id}
         refreshing={loading}
         onRefresh={refreshRecommendations}
+        onScrollToIndexFailed={({ averageItemLength, index }) => {
+          listRef.current?.scrollToOffset({ animated: true, offset: Math.max(averageItemLength * index, 0) });
+        }}
         contentContainerStyle={[styles.content, { paddingBottom: 112 + fixedActionPaddingBottom }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
@@ -775,7 +822,13 @@ export function RecommendationsScreen({ navigation }: Props) {
           ) : null
         }
         renderItem={({ item }) => (
-          <AppCard style={[styles.minimalCard, styles.card]}>
+          <AppCard
+            style={[
+              styles.minimalCard,
+              styles.card,
+              highlightedRecommendationId === item.recommendation.id && styles.highlightedCard,
+            ]}
+          >
             <View style={styles.cardHeader}>
               <View style={styles.recipeTitleBlock}>
                 <Text style={styles.recipeTitle}>{item.recommendation.title}</Text>
@@ -1075,92 +1128,6 @@ function formatRagUnavailableMessage(ragResult: RagResult, t: TFunction) {
   }
 
   return ragResult.message;
-}
-
-async function getRecommendationInputSnapshot(language: 'zh' | 'en', extraPreference = '') {
-  const settings = await getSettings();
-  const [ingredients, recentCookedRecipeIds, datasets, libraries] = await Promise.all([
-    listIngredients(),
-    getRecentCookedRecipeIds(settings.recentHistoryDays),
-    listInstalledDatasets(),
-    listUserRecipeLibraries(),
-  ]);
-
-  return {
-    settings,
-    ingredients,
-    recentCookedRecipeIds,
-    inputSignature: buildRecommendationInputSignature({
-      language,
-      settings,
-      ingredients,
-      recentCookedRecipeIds,
-      datasets,
-      libraries,
-      extraPreference,
-    }),
-  };
-}
-
-function buildRecommendationInputSignature({
-  language,
-  settings,
-  ingredients,
-  recentCookedRecipeIds,
-  datasets,
-  libraries,
-  extraPreference,
-}: {
-  language: 'zh' | 'en';
-  settings: AppSettings;
-  ingredients: Ingredient[];
-  recentCookedRecipeIds: Set<string>;
-  datasets: InstalledDataset[];
-  libraries: UserRecipeLibrary[];
-  extraPreference: string;
-}) {
-  const activeDataset = datasets.find((item) => item.active) ?? null;
-
-  return JSON.stringify({
-    language,
-    extraPreference: normalizeSignatureText(extraPreference),
-    settings: {
-      servings: settings.servings,
-      dietaryPreferences: normalizeSignatureText(settings.dietaryPreferences),
-      maxTimeMinutes: settings.maxTimeMinutes ?? null,
-      preferredDifficulty: settings.preferredDifficulty,
-      recentHistoryDays: settings.recentHistoryDays,
-    },
-    ingredients: ingredients
-      .map((item) => ({
-        id: item.id,
-        name: normalizeSignatureText(item.name),
-        quantity: item.quantity,
-        unit: normalizeSignatureText(item.unit),
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-    recentCookedRecipeIds: Array.from(recentCookedRecipeIds).sort(),
-    activeDataset: activeDataset
-      ? {
-          id: activeDataset.id,
-          version: activeDataset.version,
-          recipeCount: activeDataset.recipeCount,
-          chunkCount: activeDataset.chunkCount,
-        }
-      : null,
-    enabledPersonalLibraries: libraries
-      .filter((item) => item.enabled)
-      .map((item) => ({
-        id: item.id,
-        recipeCount: item.recipeCount,
-        updatedAt: item.updatedAt,
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  });
-}
-
-function normalizeSignatureText(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function isRecentlyCookedRagItem(item: RagRecommendation, recentCookedRecipeIds: Set<string>) {
@@ -1671,6 +1638,10 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: spacing.md,
+  },
+  highlightedCard: {
+    borderColor: colors.primary,
+    borderWidth: 2,
   },
   cardHeader: {
     flexDirection: 'row',

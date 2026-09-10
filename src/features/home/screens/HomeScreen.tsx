@@ -1,143 +1,166 @@
-import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ComponentType } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  BookOpen,
-  Camera,
-  Check,
-  ChefHat,
-  ChevronRight,
-  Circle,
-  KeyRound,
-  PackageCheck,
-  Plus,
-  Refrigerator,
-  Settings2,
-  Sparkles,
-} from 'lucide-react-native';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { AlertTriangle, ChefHat, ChevronRight, Clock3, Refrigerator, Settings2, Sparkles } from 'lucide-react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { listInstalledDatasets } from '../../../datasets/datasetRegistry';
 import { listRecipes } from '../../../db/recipesRepository';
-import { listEnabledUserRecipesWithLibraries, type UserRecipeWithLibrary } from '../../../db/userRecipesRepository';
+import { listEnabledUserRecipesWithLibraries } from '../../../db/userRecipesRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { hasAiDataConsent } from '../../../privacy/ai-data-consent';
 import { getActiveEmbeddingModel } from '../../../rag/model/modelRegistry';
 import { radii, spacing, type AppColorTokens, useAppTheme } from '../../../shared/theme/theme';
+import { loadRecommendationCache } from '../../../storage/recommendationCacheStorage';
 import { hasApiKey } from '../../../storage/settingsStorage';
-import type { HomeStackScreenProps, Ingredient, InstalledDataset, InstalledEmbeddingModel, Recipe } from '../../../types';
-import { useIngredientInventory } from '../../ingredients';
+import type { HomeStackScreenProps, Ingredient, RefinedRagRecommendation } from '../../../types';
+import { classifyRecommendationCache, type RecommendationCacheVisibility } from '../../recommendations/recommendation-cache-policy';
+import { getRecommendationInputSnapshot } from '../../recommendations/recommendation-input';
 
 type Props = HomeStackScreenProps<'Home'>;
-
-type HomeRecipePreview = {
-  id: string;
-  libraryId?: string;
-  recipeId: string;
-  source: 'base' | 'personal';
-  sourceLabel?: string;
-  title: string;
-};
+type HomePrompt = 'setup' | 'fridge' | 'inventoryError' | null;
 
 type HomeSnapshot = {
+  cacheVisibility: RecommendationCacheVisibility;
   consentReady: boolean;
   error: string | null;
+  ingredients: Ingredient[];
   keyReady: boolean;
   loading: boolean;
   modelReady: boolean;
-  previews: HomeRecipePreview[];
-  sourceCount: number;
+  recommendations: RefinedRagRecommendation[];
   sourceReady: boolean;
 };
 
-type ReadinessIssue = 'loading' | 'inventoryError' | 'ingredients' | 'gemini' | 'model' | 'source' | 'ready';
-
 const INITIAL_SNAPSHOT: HomeSnapshot = {
+  cacheVisibility: 'hidden',
   consentReady: false,
   error: null,
+  ingredients: [],
   keyReady: false,
   loading: true,
   modelReady: false,
-  previews: [],
-  sourceCount: 0,
+  recommendations: [],
   sourceReady: false,
 };
 
-const MAX_INGREDIENTS = 6;
-const MAX_PREVIEWS = 3;
-
 export function HomeScreen({ navigation }: Props) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { colors } = useAppTheme();
-  const { ingredients, loading: inventoryLoading, loadError, loadIngredients } = useIngredientInventory();
+  const { fontScale } = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(INITIAL_SNAPSHOT);
+  const [prompt, setPrompt] = useState<HomePrompt>(null);
 
   const loadSnapshot = useCallback(async () => {
-    const [keyResult, consentResult, datasetsResult, personalResult, modelResult, recipesResult] = await Promise.allSettled([
+    setSnapshot((current) => ({ ...current, error: null, loading: true }));
+    const results = await Promise.allSettled([
+      getRecommendationInputSnapshot(language),
       hasApiKey('gemini'),
       hasAiDataConsent(),
       listInstalledDatasets(),
       listEnabledUserRecipesWithLibraries(),
       getActiveEmbeddingModel(),
       listRecipes(),
+      loadRecommendationCache(),
     ]);
 
-    const datasets = settledValue<InstalledDataset[]>(datasetsResult, []);
-    const personalRecipes = settledValue<UserRecipeWithLibrary[]>(personalResult, []);
-    const model = settledValue<InstalledEmbeddingModel | null>(modelResult, null);
-    const baseRecipes = settledValue<Recipe[]>(recipesResult, []);
-    const activeDatasets = datasets.filter((dataset) => dataset.active && dataset.status === 'installed');
-    const enabledPersonalLibraryCount = new Set(personalRecipes.map((recipe) => recipe.libraryId)).size;
+    const [inputResult, keyResult, consentResult, datasetsResult, personalResult, modelResult, recipesResult, cacheResult] = results;
+    const input = settledValue(inputResult, null);
+    const datasets = settledValue(datasetsResult, []);
+    const personalRecipes = settledValue(personalResult, []);
+    const baseRecipes = settledValue(recipesResult, []);
+    const cache = settledValue(cacheResult, null);
+    const currentInputSignature = input?.inputSignature ?? '';
+    const cacheVisibility = cache && currentInputSignature
+      ? classifyRecommendationCache(cache, currentInputSignature, language)
+      : 'hidden';
 
-    return {
+    setSnapshot({
+      cacheVisibility,
       consentReady: settledValue(consentResult, false),
-      error: firstRejectedMessage([keyResult, consentResult, datasetsResult, personalResult, modelResult, recipesResult]),
+      error: firstRejectedMessage([inputResult]),
+      ingredients: input?.ingredients ?? [],
       keyReady: settledValue(keyResult, false),
       loading: false,
-      modelReady: Boolean(model),
-      previews: buildPreviews(personalRecipes, baseRecipes),
-      sourceCount: activeDatasets.length + enabledPersonalLibraryCount + (baseRecipes.length > 0 ? 1 : 0),
-      sourceReady: activeDatasets.length > 0 || personalRecipes.length > 0 || baseRecipes.length > 0,
-    } satisfies HomeSnapshot;
-  }, []);
+      modelReady: Boolean(settledValue(modelResult, null)),
+      recommendations: cacheVisibility === 'hidden' ? [] : cache?.refinedRecommendations.slice(0, 3) ?? [],
+      sourceReady:
+        datasets.some((dataset) => dataset.active && dataset.status === 'installed') ||
+        personalRecipes.length > 0 ||
+        baseRecipes.length > 0,
+    });
+  }, [language]);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      setSnapshot((current) => ({ ...current, error: null, loading: true }));
-
-      void Promise.all([loadIngredients(), loadSnapshot()]).then(([, nextSnapshot]) => {
-        if (active) {
-          setSnapshot(nextSnapshot);
-        }
-      });
-
-      return () => {
-        active = false;
-      };
-    }, [loadIngredients, loadSnapshot]),
+      void loadSnapshot();
+    }, [loadSnapshot]),
   );
 
-  const displayedIngredients = useMemo(() => ingredients.slice(0, MAX_INGREDIENTS), [ingredients]);
-  const hiddenIngredientCount = Math.max(ingredients.length - displayedIngredients.length, 0);
-  const readinessIssue = getReadinessIssue(snapshot, ingredients, inventoryLoading, loadError);
-  const isGeminiReady = snapshot.keyReady && snapshot.consentReady;
+  const missingSetup = useMemo(() => {
+    const missing: string[] = [];
+    if (!snapshot.keyReady) missing.push(t('home.missingApiKey'));
+    if (!snapshot.consentReady) missing.push(t('home.missingConsent'));
+    if (!snapshot.modelReady) missing.push(t('home.missingModel'));
+    if (!snapshot.sourceReady) missing.push(t('home.missingSource'));
+    return missing;
+  }, [snapshot.consentReady, snapshot.keyReady, snapshot.modelReady, snapshot.sourceReady, t]);
 
-  const openFridge = () => navigation.navigate('FridgeStack', { screen: 'Fridge' });
-  const openManualAdd = () => navigation.navigate('FridgeStack', { screen: 'AddIngredient', params: { mode: 'manual' }, initial: false });
-  const openPhotoScan = () => navigation.navigate('FridgeStack', { screen: 'AddIngredient', params: { mode: 'photo' }, initial: false });
-  const openRecommendations = () => navigation.navigate('RecommendationsStack', { screen: 'Recommendations' });
+  const hasRecommendations = snapshot.recommendations.length > 0;
+  const setupReady = missingSetup.length === 0;
+  const showPreviousLabel = hasRecommendations && (!setupReady || snapshot.cacheVisibility === 'stale');
+  const stackCompactCards = fontScale >= 1.4;
+
   const openSettings = () => navigation.navigate('Settings');
-  const openRecipeSources = () => navigation.navigate('MyStack', { screen: 'DatasetLibrary' });
+  const openFridge = () => navigation.navigate('FridgeStack', { screen: 'Fridge' });
+  const openDatasetLibrary = () => navigation.navigate('MyStack', { screen: 'DatasetLibrary' });
 
-  const primaryAction = getPrimaryAction(readinessIssue, {
-    inventoryError: openFridge,
-    ingredients: openManualAdd,
-    gemini: openSettings,
-    model: openRecipeSources,
-    source: openRecipeSources,
-    ready: openRecommendations,
-  });
-  const heroCopy = getHeroCopy(readinessIssue, t);
+  const requestRecommendations = () => {
+    if (snapshot.loading) return;
+    if (snapshot.error) {
+      setPrompt('inventoryError');
+      return;
+    }
+    if (!setupReady) {
+      setPrompt('setup');
+      return;
+    }
+    if (snapshot.ingredients.length === 0) {
+      setPrompt('fridge');
+      return;
+    }
+
+    navigation.navigate('RecommendationsStack', {
+      screen: 'Recommendations',
+      params: { generationRequestId: createRequestId() },
+    });
+  };
+
+  const openRecommendation = (recommendation: RefinedRagRecommendation) => {
+    navigation.navigate('RecommendationsStack', {
+      screen: 'Recommendations',
+      params: { focusRecommendationId: recommendation.id },
+    });
+  };
+
+  const closePrompt = () => setPrompt(null);
+  const confirmPrompt = () => {
+    const currentPrompt = prompt;
+    closePrompt();
+    if (currentPrompt === 'inventoryError') {
+      void loadSnapshot();
+      return;
+    }
+    if (currentPrompt === 'fridge') {
+      openFridge();
+      return;
+    }
+    if (currentPrompt === 'setup') {
+      if (!snapshot.keyReady || !snapshot.consentReady) openSettings();
+      else openDatasetLibrary();
+    }
+  };
+
+  const promptCopy = getPromptCopy(prompt, missingSetup, t);
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.canvas }}>
@@ -146,235 +169,229 @@ export function HomeScreen({ navigation }: Props) {
         contentContainerStyle={{ gap: spacing.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800', letterSpacing: 0.8, lineHeight: 18 }}>
-              {t('home.eyebrow')}
-            </Text>
-            <Text selectable style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '700', lineHeight: 25 }}>
-              {t('home.contextLine')}
-            </Text>
+        <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View
+            accessible
+            accessibilityLabel={t('home.brandMark')}
+            style={{ width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryMuted }}
+          >
+            <ChefHat color={colors.primary} size={23} strokeWidth={2.1} />
           </View>
           <IconButton colors={colors} icon={Settings2} label={t('nav.settings')} onPress={openSettings} />
         </View>
 
-        <View style={{ gap: spacing.sm }}>
-          <Text selectable style={{ color: colors.textPrimary, fontSize: 31, fontWeight: '800', letterSpacing: -0.8, lineHeight: 38 }}>
-            {t('home.introTitle')}
-          </Text>
-          <Text selectable style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 23 }}>
-            {t('home.introText')}
-          </Text>
+        <View style={{ alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm }}>
+          {!hasRecommendations ? (
+            <View style={{ width: 104, height: 104, borderRadius: 32, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary }}>
+              <Sparkles color={colors.onPrimary} size={42} strokeWidth={1.7} />
+            </View>
+          ) : null}
+          <View style={{ alignItems: 'center', gap: spacing.sm }}>
+            <Text selectable style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 41, textAlign: 'center' }}>
+              {t('home.title')}
+            </Text>
+            <Text selectable style={{ maxWidth: 360, color: colors.textSecondary, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>
+              {t('home.minimalSubtitle')}
+            </Text>
+          </View>
         </View>
 
-        <View
-          style={{
-            borderRadius: radii.lg,
-            borderCurve: 'continuous',
-            backgroundColor: colors.primary,
-            padding: spacing.xl,
-            gap: spacing.lg,
-          }}
-        >
-          <View style={{ alignSelf: 'flex-start', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 11, paddingVertical: 6 }}>
-            <Text selectable style={{ color: colors.onPrimary, fontSize: 13, fontWeight: '700', lineHeight: 17 }}>
-              {heroCopy.badge}
-            </Text>
-          </View>
-          <View style={{ gap: spacing.sm }}>
-            <Text selectable style={{ color: colors.onPrimary, fontSize: 25, fontWeight: '800', letterSpacing: -0.4, lineHeight: 31 }}>
-              {heroCopy.title}
-            </Text>
-            <Text selectable style={{ color: colors.onPrimary, opacity: 0.82, fontSize: 15, lineHeight: 22 }}>
-              {heroCopy.description}
-            </Text>
-          </View>
+        <View style={{ gap: spacing.sm }}>
           <Pressable
-            accessibilityLabel={heroCopy.action}
+            accessibilityHint={t('home.generateHint')}
+            accessibilityLabel={hasRecommendations ? t('home.regenerate') : t('home.generate')}
             accessibilityRole="button"
-            disabled={!primaryAction}
-            onPress={primaryAction ?? undefined}
+            accessibilityState={{ busy: snapshot.loading, disabled: snapshot.loading }}
+            disabled={snapshot.loading}
+            onPress={requestRecommendations}
             style={({ pressed }) => ({
-              minHeight: 52,
+              minHeight: 62,
               borderRadius: radii.md,
               borderCurve: 'continuous',
+              backgroundColor: pressed ? colors.primaryPressed : colors.primary,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+              opacity: snapshot.loading ? 0.72 : 1,
+            })}
+          >
+            {snapshot.loading ? <ActivityIndicator color={colors.onPrimary} /> : <Sparkles color={colors.onPrimary} size={22} strokeWidth={2} />}
+            <Text style={{ flex: 1, color: colors.onPrimary, fontSize: 17, fontWeight: '800', lineHeight: 23 }}>
+              {hasRecommendations ? t('home.regenerate') : t('home.generate')}
+            </Text>
+            <ChevronRight color={colors.onPrimary} size={21} strokeWidth={2.3} />
+          </Pressable>
+          <Text selectable style={{ color: colors.textTertiary, fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
+            {t('home.geminiUsageHint')}
+          </Text>
+          <Pressable
+            accessibilityLabel={getFridgeButtonLabel(snapshot.ingredients.length, t)}
+            accessibilityRole="button"
+            onPress={openFridge}
+            style={({ pressed }) => ({
+              minHeight: 54,
+              borderRadius: radii.md,
+              borderCurve: 'continuous',
+              borderWidth: 1,
+              borderColor: colors.borderStrong,
               backgroundColor: pressed ? colors.surfacePressed : colors.surface,
               paddingHorizontal: spacing.lg,
               flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: spacing.md,
-              opacity: primaryAction ? 1 : 0.72,
+              justifyContent: 'center',
+              gap: spacing.sm,
             })}
           >
-            <Text style={{ flex: 1, color: colors.primaryPressed, fontSize: 16, fontWeight: '800', lineHeight: 21 }}>{heroCopy.action}</Text>
-            <ChevronRight color={colors.primaryPressed} size={20} strokeWidth={2.4} />
+            <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
+            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
+              {getFridgeButtonLabel(snapshot.ingredients.length, t)}
+            </Text>
           </Pressable>
         </View>
 
-        <Section title={t('home.quickActions')}>
-          <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <QuickAction
-              colors={colors}
-              description={t('home.manualEntryDetail')}
-              icon={Plus}
-              onPress={openManualAdd}
-              title={t('home.manualEntry')}
-            />
-            <QuickAction
-              colors={colors}
-              description={isGeminiReady ? t('home.photoEntryDetail') : t('home.scanUnavailable')}
-              icon={Camera}
-              onPress={isGeminiReady ? openPhotoScan : openSettings}
-              title={t('home.photoEntry')}
-            />
-          </View>
-        </Section>
-
-        <Section actionLabel={t('home.viewFridge')} onAction={openFridge} title={t('home.yourFridge')}>
-          <View
-            style={{
-              minHeight: 124,
-              borderRadius: radii.md,
-              borderCurve: 'continuous',
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
-              padding: spacing.lg,
-              gap: spacing.md,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <View
-                style={{ width: 44, height: 44, borderRadius: 14, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryMuted }}
-              >
-                <Refrigerator color={colors.primary} size={22} strokeWidth={2} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text selectable style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', lineHeight: 22 }}>
-                  {ingredients.length === 0
-                    ? t('home.fridgePreviewEmpty')
-                    : t(ingredients.length === 1 ? 'home.fridgePreviewCountOne' : 'home.fridgePreviewCount', { count: ingredients.length })}
-                </Text>
-                <Text selectable style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
-                  {ingredients.length === 0 ? t('home.emptyText') : t('home.readyText')}
-                </Text>
-              </View>
+        {hasRecommendations ? (
+          <View style={{ gap: spacing.md }}>
+            <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
+              <Text selectable style={{ flex: 1, color: colors.textPrimary, fontSize: 20, fontWeight: '900', lineHeight: 26 }}>
+                {t('home.todayInspiration')}
+              </Text>
+              {showPreviousLabel ? (
+                <View style={{ borderRadius: 999, backgroundColor: colors.accentMuted, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Text selectable style={{ color: colors.warning, fontSize: 12, fontWeight: '800', lineHeight: 16 }}>
+                    {snapshot.cacheVisibility === 'stale' ? t('home.mayNotMatch') : t('home.previousRecommendations')}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            {displayedIngredients.length > 0 ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                {displayedIngredients.map((ingredient) => (
-                  <IngredientChip colors={colors} ingredient={ingredient} key={ingredient.id} />
+
+            <FeaturedRecommendationCard colors={colors} recommendation={snapshot.recommendations[0]} t={t} onPress={() => openRecommendation(snapshot.recommendations[0])} />
+
+            {snapshot.recommendations.length > 1 ? (
+              <View style={{ flexDirection: stackCompactCards ? 'column' : 'row', gap: spacing.md }}>
+                {snapshot.recommendations.slice(1).map((recommendation) => (
+                  <CompactRecommendationCard colors={colors} key={recommendation.id} recommendation={recommendation} t={t} onPress={() => openRecommendation(recommendation)} />
                 ))}
-                {hiddenIngredientCount > 0 ? (
-                  <IngredientChip colors={colors} label={t('home.moreIngredients', { count: hiddenIngredientCount })} />
-                ) : null}
               </View>
             ) : null}
           </View>
-        </Section>
-
-        <Section title={t('home.readinessTitle')}>
-          <View
-            style={{
-              borderRadius: radii.md,
-              borderCurve: 'continuous',
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
-              overflow: 'hidden',
-            }}
-          >
-            <ReadinessRow colors={colors} complete={isGeminiReady} icon={KeyRound} label={t('home.statusGemini')} />
-            <ReadinessRow colors={colors} complete={snapshot.modelReady} icon={PackageCheck} label={t('home.statusModel')} />
-            <ReadinessRow colors={colors} complete={snapshot.sourceReady} icon={BookOpen} label={t('home.statusSource')} value={snapshot.sourceCount ? String(snapshot.sourceCount) : undefined} />
-            <ReadinessRow colors={colors} complete={ingredients.length > 0} icon={Refrigerator} label={t('home.statusIngredients')} value={ingredients.length ? String(ingredients.length) : undefined} last />
-          </View>
-        </Section>
-
-        <Section title={t('home.tonightIdeas')}>
-          {snapshot.previews.length > 0 ? (
-            <View style={{ gap: spacing.sm }}>
-              {snapshot.previews.map((preview) => (
-                <RecipePreviewRow
-                  colors={colors}
-                  key={preview.id}
-                  onPress={() =>
-                    navigation.navigate('RecipeDetail', {
-                      recipeId: preview.recipeId,
-                      source: preview.source === 'personal' ? 'personal' : 'official',
-                      libraryId: preview.libraryId,
-                    })
-                  }
-                  sourceLabel={preview.source === 'base' ? t('home.baseLibrary') : preview.sourceLabel ?? t('nav.userRecipeLibraries')}
-                  title={preview.title}
-                />
-              ))}
-            </View>
-          ) : (
-            <View style={{ borderRadius: radii.md, borderCurve: 'continuous', backgroundColor: colors.surfaceMuted, padding: spacing.xl, alignItems: 'center', gap: spacing.sm }}>
-              <ChefHat color={colors.textTertiary} size={28} strokeWidth={1.8} />
-              <Text selectable style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center' }}>
-                {snapshot.error || loadError || t('home.noIdeas')}
-              </Text>
-            </View>
-          )}
-        </Section>
+        ) : null}
       </ScrollView>
+
+      <HomePromptModal
+        colors={colors}
+        visible={Boolean(prompt && promptCopy)}
+        title={promptCopy?.title ?? ''}
+        message={promptCopy?.message ?? ''}
+        cancelLabel={prompt === 'inventoryError' ? t('home.checkFridge') : t('common.cancel')}
+        confirmLabel={promptCopy?.confirmLabel ?? ''}
+        onCancel={() => {
+          const shouldOpenFridge = prompt === 'inventoryError';
+          closePrompt();
+          if (shouldOpenFridge) openFridge();
+        }}
+        onConfirm={confirmPrompt}
+      />
     </SafeAreaView>
   );
 }
 
-function Section({ actionLabel, children, onAction, title }: { actionLabel?: string; children: ReactNode; onAction?: () => void; title: string }) {
-  const { colors } = useAppTheme();
+function FeaturedRecommendationCard({ colors, recommendation, t, onPress }: RecommendationCardProps) {
+  const missingCount = recommendation.missingIngredients.length;
 
   return (
-    <View style={{ gap: spacing.md }}>
-      <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
-        <Text selectable style={{ flex: 1, color: colors.textPrimary, fontSize: 19, fontWeight: '800', lineHeight: 24 }}>
-          {title}
-        </Text>
-        {actionLabel && onAction ? (
-          <Pressable accessibilityLabel={actionLabel} accessibilityRole="button" onPress={onAction} style={{ minHeight: 48, justifyContent: 'center', paddingLeft: spacing.md }}>
-            <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '700' }}>{actionLabel}</Text>
-          </Pressable>
-        ) : null}
+    <Pressable
+      accessibilityHint={t('home.openRecommendationHint')}
+      accessibilityLabel={recommendation.title}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 228,
+        borderRadius: radii.lg,
+        borderCurve: 'continuous',
+        backgroundColor: pressed ? colors.primaryPressed : colors.primary,
+        padding: spacing.xl,
+        gap: spacing.lg,
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+        <View style={{ width: 58, height: 58, borderRadius: 18, borderCurve: 'continuous', backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
+          <ChefHat color={colors.onPrimary} size={29} strokeWidth={1.8} />
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text selectable style={{ color: colors.onPrimary, fontSize: 24, fontWeight: '900', letterSpacing: -0.4, lineHeight: 30 }}>
+            {recommendation.title}
+          </Text>
+          <Text selectable style={{ color: colors.onPrimary, opacity: 0.82, fontSize: 14, fontWeight: '700', lineHeight: 20 }}>
+            {missingCount === 0 ? t('home.ingredientsReady') : t('home.ingredientsMissing', { count: missingCount })}
+          </Text>
+        </View>
+        <ChevronRight color={colors.onPrimary} size={22} strokeWidth={2} />
       </View>
-      {children}
-    </View>
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+        <MetaPill colors={colors} icon={Clock3} label={formatMinutes(recommendation.estimatedTimeMinutes, t)} />
+        <MetaPill colors={colors} icon={Sparkles} label={formatDifficulty(recommendation.difficulty, t)} />
+      </View>
+
+      <Text selectable numberOfLines={2} style={{ color: colors.onPrimary, opacity: 0.88, fontSize: 15, lineHeight: 22 }}>
+        {recommendation.scoreReason}
+      </Text>
+    </Pressable>
   );
 }
 
-function QuickAction({ colors, description, icon: Icon, onPress, title }: { colors: AppColorTokens; description: string; icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>; onPress: () => void; title: string }) {
+function CompactRecommendationCard({ colors, recommendation, t, onPress }: RecommendationCardProps) {
+  const missingCount = recommendation.missingIngredients.length;
+
   return (
     <Pressable
-      accessibilityHint={description}
-      accessibilityLabel={title}
+      accessibilityHint={t('home.openRecommendationHint')}
+      accessibilityLabel={recommendation.title}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => ({
         flex: 1,
-        minHeight: 142,
+        minHeight: 132,
         borderRadius: radii.md,
         borderCurve: 'continuous',
         borderWidth: 1,
         borderColor: colors.border,
         backgroundColor: pressed ? colors.surfacePressed : colors.surface,
         padding: spacing.lg,
-        justifyContent: 'space-between',
-        gap: spacing.md,
+        gap: spacing.sm,
       })}
     >
-      <View style={{ width: 42, height: 42, borderRadius: 14, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryMuted }}>
-        <Icon color={colors.primary} size={21} strokeWidth={2.2} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+        <View style={{ width: 38, height: 38, borderRadius: 13, borderCurve: 'continuous', backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+          <ChefHat color={colors.primary} size={19} strokeWidth={1.9} />
+        </View>
+        <ChevronRight color={colors.textTertiary} size={18} strokeWidth={2} />
       </View>
-      <View style={{ gap: 4 }}>
-        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>{title}</Text>
-        <Text selectable style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
-          {description}
-        </Text>
-      </View>
+      <Text selectable numberOfLines={2} style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '800', lineHeight: 21 }}>
+        {recommendation.title}
+      </Text>
+      <Text selectable style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
+        {formatMinutes(recommendation.estimatedTimeMinutes, t)} · {missingCount === 0 ? t('home.ingredientsReady') : t('home.ingredientsMissing', { count: missingCount })}
+      </Text>
     </Pressable>
+  );
+}
+
+type RecommendationCardProps = {
+  colors: AppColorTokens;
+  recommendation: RefinedRagRecommendation;
+  t: ReturnType<typeof useI18n>['t'];
+  onPress: () => void;
+};
+
+function MetaPill({ colors, icon: Icon, label }: { colors: AppColorTokens; icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>; label: string }) {
+  return (
+    <View style={{ minHeight: 34, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 11, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Icon color={colors.onPrimary} size={15} strokeWidth={2} />
+      <Text selectable style={{ color: colors.onPrimary, fontSize: 13, fontWeight: '700', lineHeight: 17 }}>{label}</Text>
+    </View>
   );
 }
 
@@ -401,121 +418,99 @@ function IconButton({ colors, icon: Icon, label, onPress }: { colors: AppColorTo
   );
 }
 
-function IngredientChip({ colors, ingredient, label }: { colors: AppColorTokens; ingredient?: Ingredient; label?: string }) {
-  const text = label ?? (ingredient ? `${ingredient.name} · ${formatQuantity(ingredient.quantity)} ${ingredient.unit}` : '');
-
+function HomePromptModal({ colors, visible, title, message, cancelLabel, confirmLabel, onCancel, onConfirm }: {
+  colors: AppColorTokens;
+  visible: boolean;
+  title: string;
+  message: string;
+  cancelLabel: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   return (
-    <View style={{ minHeight: 36, maxWidth: '100%', borderRadius: 999, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8, justifyContent: 'center' }}>
-      <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', lineHeight: 18 }}>
-        {text}
-      </Text>
-    </View>
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={{ flex: 1, backgroundColor: colors.overlay, padding: spacing.lg, alignItems: 'center', justifyContent: 'center' }} onPress={onCancel}>
+        <Pressable
+          accessibilityViewIsModal
+          onPress={(event) => event.stopPropagation()}
+          style={{ width: '100%', maxWidth: 420, borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: spacing.xl, gap: spacing.lg }}
+        >
+          <View style={{ width: 48, height: 48, borderRadius: 16, borderCurve: 'continuous', backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' }}>
+            <AlertTriangle color={colors.warning} size={24} strokeWidth={2} />
+          </View>
+          <View style={{ gap: spacing.sm }}>
+            <Text selectable accessibilityRole="header" style={{ color: colors.textPrimary, fontSize: 23, fontWeight: '900', lineHeight: 29 }}>{title}</Text>
+            <Text selectable style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>{message}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <ModalButton colors={colors} label={cancelLabel} onPress={onCancel} secondary />
+            <ModalButton colors={colors} label={confirmLabel} onPress={onConfirm} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
-function ReadinessRow({ colors, complete, icon: Icon, label, last = false, value }: { colors: AppColorTokens; complete: boolean; icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>; label: string; last?: boolean; value?: string }) {
-  return (
-    <View style={{ minHeight: 58, borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-      <Icon color={complete ? colors.success : colors.textTertiary} size={20} strokeWidth={2} />
-      <Text selectable style={{ flex: 1, color: colors.textPrimary, fontSize: 15, fontWeight: '600', lineHeight: 21 }}>
-        {label}
-      </Text>
-      {value ? <Text style={{ color: colors.textSecondary, fontSize: 14, fontVariant: ['tabular-nums'] }}>{value}</Text> : null}
-      {complete ? <Check color={colors.success} size={18} strokeWidth={2.4} /> : <Circle color={colors.borderStrong} size={17} strokeWidth={2} />}
-    </View>
-  );
-}
-
-function RecipePreviewRow({ colors, onPress, sourceLabel, title }: { colors: AppColorTokens; onPress: () => void; sourceLabel: string; title: string }) {
+function ModalButton({ colors, label, onPress, secondary = false }: { colors: AppColorTokens; label: string; onPress: () => void; secondary?: boolean }) {
   return (
     <Pressable
-      accessibilityHint={sourceLabel}
-      accessibilityLabel={title}
+      accessibilityLabel={label}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => ({
-        minHeight: 74,
+        flex: 1,
+        minHeight: 50,
         borderRadius: radii.md,
         borderCurve: 'continuous',
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: pressed ? colors.surfacePressed : colors.surface,
-        padding: spacing.md,
-        flexDirection: 'row',
+        borderWidth: secondary ? 1 : 0,
+        borderColor: colors.borderStrong,
+        backgroundColor: pressed ? (secondary ? colors.surfacePressed : colors.primaryPressed) : secondary ? colors.surface : colors.primary,
+        paddingHorizontal: spacing.md,
         alignItems: 'center',
-        gap: spacing.md,
+        justifyContent: 'center',
       })}
     >
-      <View style={{ width: 46, height: 46, borderRadius: 14, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentMuted }}>
-        <Sparkles color={colors.accent} size={21} strokeWidth={2} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text numberOfLines={2} style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
-          {title}
-        </Text>
-        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
-          {sourceLabel}
-        </Text>
-      </View>
-      <ChevronRight color={colors.textTertiary} size={20} strokeWidth={2} />
+      <Text style={{ color: secondary ? colors.textPrimary : colors.onPrimary, fontSize: 15, fontWeight: '800', lineHeight: 20, textAlign: 'center' }}>{label}</Text>
     </Pressable>
   );
 }
 
-function getReadinessIssue(snapshot: HomeSnapshot, ingredients: Ingredient[], inventoryLoading: boolean, inventoryError: string | null): ReadinessIssue {
-  if (snapshot.loading || inventoryLoading) return 'loading';
-  if (inventoryError) return 'inventoryError';
-  if (ingredients.length === 0) return 'ingredients';
-  if (!snapshot.keyReady || !snapshot.consentReady) return 'gemini';
-  if (!snapshot.modelReady) return 'model';
-  if (!snapshot.sourceReady) return 'source';
-  return 'ready';
+function getPromptCopy(prompt: HomePrompt, missingSetup: string[], t: ReturnType<typeof useI18n>['t']) {
+  if (prompt === 'setup') {
+    return {
+      title: t('home.setupRequiredTitle'),
+      message: `${t('home.setupRequiredText')}\n\n${missingSetup.map((item) => `• ${item}`).join('\n')}`,
+      confirmLabel: t('home.finishSetup'),
+    };
+  }
+  if (prompt === 'fridge') {
+    return { title: t('home.fridgeEmptyPromptTitle'), message: t('home.fridgeEmptyPromptText'), confirmLabel: t('home.goToFridge') };
+  }
+  if (prompt === 'inventoryError') {
+    return { title: t('home.inventoryErrorPromptTitle'), message: t('home.inventoryErrorPromptText'), confirmLabel: t('common.retry') };
+  }
+  return null;
 }
 
-function getPrimaryAction(issue: ReadinessIssue, actions: Record<'inventoryError' | 'ingredients' | 'gemini' | 'model' | 'source' | 'ready', () => void>) {
-  if (issue === 'loading') return null;
-  return actions[issue];
+function getFridgeButtonLabel(count: number, t: ReturnType<typeof useI18n>['t']) {
+  return count > 0 ? t('home.fridgeWithCount', { count }) : t('home.fridgeEmptyAction');
 }
 
-function getHeroCopy(issue: ReadinessIssue, t: ReturnType<typeof useI18n>['t']) {
-  if (issue === 'loading') {
-    return { badge: t('home.loadingInventoryTitle'), title: t('home.loadingInventoryTitle'), description: t('home.loadingInventoryText'), action: t('home.loadingInventoryTitle') };
-  }
-  if (issue === 'inventoryError') {
-    return { badge: t('home.inventoryLoadFailedTitle'), title: t('home.inventoryLoadFailedTitle'), description: t('home.inventoryLoadFailedText'), action: t('home.viewFridge') };
-  }
-  if (issue === 'ingredients') {
-    return { badge: t('home.geminiMissingBadge'), title: t('home.noIngredientsTitle'), description: t('home.noIngredientsText'), action: t('home.manualEntry') };
-  }
-  if (issue === 'gemini') {
-    return { badge: t('home.geminiMissingBadge'), title: t('home.geminiMissingTitle'), description: t('home.geminiMissingText'), action: t('home.setupGemini') };
-  }
-  if (issue === 'model') {
-    return { badge: t('home.embeddingUnavailableBadge'), title: t('home.embeddingUnavailableTitle'), description: t('home.embeddingUnavailableText'), action: t('home.downloadModel') };
-  }
-  if (issue === 'source') {
-    return { badge: t('home.recipeLibraryMissingBadge'), title: t('home.recipeLibraryMissingTitle'), description: t('home.recipeLibraryMissingText'), action: t('home.setupRecipeLibrary') };
-  }
-  return { badge: t('home.readyBadge'), title: t('home.readyTitle'), description: t('home.readyText'), action: t('home.findNextMeal') };
+function formatMinutes(value: number | null, t: ReturnType<typeof useI18n>['t']) {
+  return value ? t('recommendations.minutes', { value }) : t('recommendations.unknownMinutes');
 }
 
-function buildPreviews(personalRecipes: UserRecipeWithLibrary[], baseRecipes: Recipe[]): HomeRecipePreview[] {
-  const personal = personalRecipes.map((recipe) => ({
-    id: `personal:${recipe.id}`,
-    libraryId: recipe.libraryId,
-    recipeId: recipe.id,
-    source: 'personal' as const,
-    sourceLabel: recipe.libraryName,
-    title: recipe.title,
-  }));
-  const base = baseRecipes.map((recipe) => ({
-    id: `base:${recipe.id}`,
-    recipeId: recipe.id,
-    source: 'base' as const,
-    title: recipe.title,
-  }));
+function formatDifficulty(value: RefinedRagRecommendation['difficulty'], t: ReturnType<typeof useI18n>['t']) {
+  if (value === '简单') return t('difficulty.easy');
+  if (value === '中等') return t('difficulty.medium');
+  if (value === '偏难') return t('difficulty.hard');
+  return t('difficulty.unknown');
+}
 
-  return [...personal, ...base].slice(0, MAX_PREVIEWS);
+function createRequestId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
@@ -526,8 +521,4 @@ function firstRejectedMessage(results: PromiseSettledResult<unknown>[]) {
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (!rejected) return null;
   return rejected.reason instanceof Error ? rejected.reason.message : String(rejected.reason || 'Unknown error');
-}
-
-function formatQuantity(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }

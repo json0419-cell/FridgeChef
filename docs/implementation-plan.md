@@ -41,6 +41,7 @@ The product remains a client-only, local-first app with no developer backend and
 ## 3. Domain and Behavioral Rules
 
 - A Photo Recognition Result is an editable draft. Only a user-saved result becomes a Confirmed Ingredient.
+- A new Recommendation batch requires at least one Confirmed Ingredient. An empty fridge never starts random or ingredient-free generation.
 - A Gemini-extracted YouTube result is a Recipe Draft. Only explicit review and save creates a Personal Recipe.
 - Dietary Restrictions are hard filters and are never relaxed. Taste Preferences and time preferences may be relaxed only when no result exists, and the UI states what changed.
 - Ready to Cook means no missing main ingredient. Almost Ready to Cook means one or two missing main ingredients.
@@ -115,6 +116,8 @@ Deliverables:
 - Semantic light/dark design tokens and reusable accessible primitives.
 - Four-destination bottom navigation: Home, Fridge, Recommendations, and My.
 - Home screen that prioritizes the next action: confirm ingredients or continue to Recommendations.
+- An intentionally minimal Home screen whose primary action explicitly generates Recommendations, whose secondary action opens Fridge, and whose summary shows at most three safe cached results.
+- Opening the Recommendations destination directly never calls Gemini; only the explicit Home generate action or an explicit action inside Recommendations may create a new batch.
 - Localized Chinese and English copy using the approved product names.
 - Loading, empty, error, disabled, and representative populated states.
 

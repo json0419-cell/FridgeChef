@@ -312,7 +312,12 @@ export type HistoryStackParamList = {
 };
 
 export type RecommendationsStackParamList = {
-  Recommendations: undefined;
+  Recommendations:
+    | {
+        focusRecommendationId?: string;
+        generationRequestId?: string;
+      }
+    | undefined;
   RecipeDetail: RecipeDetailParams;
 };
 
