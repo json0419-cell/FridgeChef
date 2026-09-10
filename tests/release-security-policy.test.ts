@@ -17,6 +17,19 @@ test('release configuration blocks the overlay permission', () => {
   assert.equal(mainManifest.includes('android.permission.SYSTEM_ALERT_WINDOW'), false);
 });
 
+test('Android follows the system color scheme', () => {
+  const appConfig = JSON.parse(read('app.json')) as {
+    expo?: { userInterfaceStyle?: string };
+  };
+  const nativeStrings = read('android/app/src/main/res/values/strings.xml');
+
+  assert.equal(appConfig.expo?.userInterfaceStyle, 'automatic');
+  assert.match(
+    nativeStrings,
+    /name="expo_system_ui_user_interface_style"[^>]*>automatic<\/string>/,
+  );
+});
+
 test('all Gemini feature modules use the unified network client', () => {
   const featureFiles = [
     'src/ai/geminiAdapter.ts',
