@@ -1,9 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import type { AiProvider, AppSettings } from '../types';
+import {
+  clearStoredApiKey,
+  getOrMigrateApiKey,
+  saveSecureApiKey,
+  type CredentialStore,
+  type OrdinaryStore,
+} from './api-key-storage';
 
 const SETTINGS_KEY = 'chi_shen_me.settings';
-const API_KEY_PREFIX = 'chi_shen_me.api_key';
+
+const credentialStore: CredentialStore = {
+  getItem: (key) => SecureStore.getItemAsync(key),
+  setItem: (key, value) => SecureStore.setItemAsync(key, value),
+  removeItem: (key) => SecureStore.deleteItemAsync(key),
+};
+
+const ordinaryStore: OrdinaryStore = {
+  getItem: (key) => AsyncStorage.getItem(key),
+  setItem: (key, value) => AsyncStorage.setItem(key, value),
+  removeItem: (key) => AsyncStorage.removeItem(key),
+};
 
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
@@ -51,7 +69,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 }
 
 export async function getApiKey(provider: AiProvider): Promise<string | null> {
-  return SecureStore.getItemAsync(apiKeyStorageKey(provider));
+  return getOrMigrateApiKey(provider, credentialStore, ordinaryStore);
 }
 
 export async function saveApiKey(provider: AiProvider, apiKey: string): Promise<void> {
@@ -60,20 +78,16 @@ export async function saveApiKey(provider: AiProvider, apiKey: string): Promise<
     throw new Error('API Key 不能为空。');
   }
 
-  await SecureStore.setItemAsync(apiKeyStorageKey(provider), trimmed);
+  await saveSecureApiKey(provider, trimmed, credentialStore, ordinaryStore);
 }
 
 export async function clearApiKey(provider: AiProvider): Promise<void> {
-  await SecureStore.deleteItemAsync(apiKeyStorageKey(provider));
+  await clearStoredApiKey(provider, credentialStore, ordinaryStore);
 }
 
 export async function hasApiKey(provider: AiProvider): Promise<boolean> {
   const key = await getApiKey(provider);
   return Boolean(key);
-}
-
-function apiKeyStorageKey(provider: AiProvider) {
-  return `${API_KEY_PREFIX}.${provider}`;
 }
 
 function normalizeServings(value: unknown) {

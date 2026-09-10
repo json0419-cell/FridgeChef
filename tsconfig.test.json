@@ -7,6 +7,7 @@
     "tests/**/*.ts",
     "src/db/database-diagnostics.ts",
     "src/db/migrations.ts",
+    "src/storage/api-key-storage.ts",
     "src/features/recommendations/recommendation-cache-policy.ts",
     "src/datasets/dataset-manifest.ts",
     "src/rag/model/model-manifest.ts",
