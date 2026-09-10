@@ -5,6 +5,7 @@
   },
   "include": [
     "tests/**/*.ts",
+    "src/db/database-diagnostics.ts",
     "src/db/migrations.ts",
     "src/features/recommendations/recommendation-cache-policy.ts",
     "src/datasets/dataset-manifest.ts",

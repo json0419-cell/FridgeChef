@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppFeedbackProvider } from '../shared/components';
 import { initializeDatabase } from '../db/database';
+import {
+  createDatabaseStartupDiagnostic,
+  type DatabaseStartupDiagnostic,
+} from '../db/database-diagnostics';
 import { I18nProvider, useI18n } from '../i18n/i18n';
 import { AddIngredientScreen, ConfirmRecognizedFoodScreen, FridgeScreen } from '../features/ingredients';
 import {
@@ -46,6 +50,11 @@ const TAB_ICONS = {
   MyStack: UserRound,
 } as const;
 
+type StartupState =
+  | { status: 'loading' }
+  | { status: 'ready' }
+  | { status: 'failed'; diagnostic: DatabaseStartupDiagnostic };
+
 export default function App() {
   return (
     <I18nProvider>
@@ -59,8 +68,7 @@ export default function App() {
 function AppContent() {
   const { t } = useI18n();
   const { colors, isDark } = useAppTheme();
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [startupState, setStartupState] = useState<StartupState>({ status: 'loading' });
   const navigationTheme = useMemo(
     () => ({
       ...(isDark ? DarkTheme : DefaultTheme),
@@ -77,35 +85,87 @@ function AppContent() {
     [colors, isDark],
   );
 
-  useEffect(() => {
-    void initializeDatabase()
-      .then(() => setReady(true))
-      .catch((caught) => {
-        setError(caught instanceof Error ? caught.message : '__DATABASE_INIT_FAILED__');
-      });
+  const prepareDatabase = useCallback(async () => {
+    setStartupState({ status: 'loading' });
+    try {
+      await initializeDatabase();
+      setStartupState({ status: 'ready' });
+    } catch (error) {
+      setStartupState({ status: 'failed', diagnostic: createDatabaseStartupDiagnostic(error) });
+    }
   }, []);
 
-  if (error) {
+  useEffect(() => {
+    void prepareDatabase();
+  }, [prepareDatabase]);
+
+  if (startupState.status === 'failed') {
+    const { diagnostic } = startupState;
+    const diagnosticText = [
+      t('app.databaseDiagnosticCode', { code: diagnostic.code }),
+      t('app.databaseDiagnosticTime', { time: diagnostic.occurredAt }),
+      t('app.databaseDiagnosticFromVersion', {
+        version: diagnostic.fromVersion ?? t('app.databaseDiagnosticUnknownVersion'),
+      }),
+      t('app.databaseDiagnosticTargetVersion', { version: diagnostic.targetVersion }),
+    ].join('\n');
+
     return (
       <SafeAreaProvider>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, backgroundColor: colors.canvas }}>
-          <Text selectable style={{ color: colors.danger, fontSize: 21, fontWeight: '800', textAlign: 'center' }}>
-            {t('app.startFailed')}
-          </Text>
-          <Text selectable style={{ color: colors.textPrimary, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>
-            {error === '__DATABASE_INIT_FAILED__' ? t('app.databaseInitFailed') : error}
-          </Text>
-        </View>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <SafeAreaView style={[startupStyles.safeArea, { backgroundColor: colors.canvas }]}>
+          <ScrollView contentContainerStyle={startupStyles.recoveryScroll}>
+            <View
+              accessibilityLiveRegion="polite"
+              style={[
+                startupStyles.recoveryCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[startupStyles.failureTitle, { color: colors.danger }]}>{t('app.startFailed')}</Text>
+              <Text style={[startupStyles.recoveryText, { color: colors.textPrimary }]}>
+                {t('app.databaseRecoveryText')}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void prepareDatabase()}
+                style={({ pressed }) => [
+                  startupStyles.retryButton,
+                  { backgroundColor: colors.primary },
+                  pressed && startupStyles.retryButtonPressed,
+                ]}
+              >
+                <Text style={[startupStyles.retryButtonText, { color: colors.onPrimary }]}>
+                  {t('common.retry')}
+                </Text>
+              </Pressable>
+              <View
+                style={[
+                  startupStyles.diagnosticCard,
+                  { backgroundColor: colors.surfaceMuted, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[startupStyles.diagnosticTitle, { color: colors.textPrimary }]}>
+                  {t('app.databaseDiagnosticTitle')}
+                </Text>
+                <Text selectable style={[startupStyles.diagnosticText, { color: colors.textSecondary }]}>
+                  {diagnosticText}
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
       </SafeAreaProvider>
     );
   }
 
-  if (!ready) {
+  if (startupState.status === 'loading') {
     return (
       <SafeAreaProvider>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, backgroundColor: colors.canvas }}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <View style={[startupStyles.loading, { backgroundColor: colors.canvas }]}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text selectable style={{ color: colors.textSecondary, fontSize: 16 }}>
+          <Text selectable style={[startupStyles.loadingText, { color: colors.textSecondary }]}>
             {t('app.loadingDatabase')}
           </Text>
         </View>
@@ -250,3 +310,79 @@ function createStackScreenOptions(colors: AppColorTokens) {
     contentStyle: { backgroundColor: colors.canvas },
   };
 }
+
+const startupStyles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
+  loadingText: {
+    fontSize: 16,
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  recoveryScroll: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  recoveryCard: {
+    width: '100%',
+    maxWidth: 620,
+    gap: spacing.lg,
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: spacing.xl,
+  },
+  failureTitle: {
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  recoveryText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  retryButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
+  },
+  retryButtonText: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  diagnosticCard: {
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: spacing.lg,
+  },
+  diagnosticTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  diagnosticText: {
+    fontSize: 13,
+    lineHeight: 20,
+    fontFamily: 'monospace',
+  },
+});

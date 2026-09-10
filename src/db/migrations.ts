@@ -1,5 +1,31 @@
 export const DATABASE_SCHEMA_VERSION = 2;
 
+export type DatabaseMigrationErrorCode =
+  | 'DATABASE_SCHEMA_TOO_NEW'
+  | 'DATABASE_SCHEMA_VERSION_INVALID'
+  | 'DATABASE_MIGRATION_PATH_MISSING'
+  | 'DATABASE_MIGRATION_FAILED';
+
+export class DatabaseMigrationError extends Error {
+  readonly code: DatabaseMigrationErrorCode;
+  readonly fromVersion: number | null;
+  readonly toVersion: number | null;
+
+  constructor(
+    code: DatabaseMigrationErrorCode,
+    message: string,
+    fromVersion: number | null,
+    toVersion: number | null,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'DatabaseMigrationError';
+    this.code = code;
+    this.fromVersion = fromVersion;
+    this.toVersion = toVersion;
+  }
+}
+
 export interface MigrationDatabase {
   execAsync(source: string): Promise<void>;
   getAllAsync<T>(source: string): Promise<T[]>;
@@ -27,8 +53,11 @@ export async function migrateDatabase(database: MigrationDatabase): Promise<numb
   let currentVersion = await readSchemaVersion(database);
 
   if (currentVersion > DATABASE_SCHEMA_VERSION) {
-    throw new Error(
-      `Database schema version ${currentVersion} is newer than supported version ${DATABASE_SCHEMA_VERSION}.`,
+    throw new DatabaseMigrationError(
+      'DATABASE_SCHEMA_TOO_NEW',
+      'Database schema is newer than this app supports.',
+      currentVersion,
+      DATABASE_SCHEMA_VERSION,
     );
   }
 
@@ -37,13 +66,28 @@ export async function migrateDatabase(database: MigrationDatabase): Promise<numb
       continue;
     }
     if (migration.version !== currentVersion + 1) {
-      throw new Error(`Missing database migration from version ${currentVersion}.`);
+      throw new DatabaseMigrationError(
+        'DATABASE_MIGRATION_PATH_MISSING',
+        'Database migration path is incomplete.',
+        currentVersion,
+        migration.version,
+      );
     }
 
-    await database.withTransactionAsync(async () => {
-      await migration.migrate(database);
-      await database.execAsync(`PRAGMA user_version = ${migration.version};`);
-    });
+    try {
+      await database.withTransactionAsync(async () => {
+        await migration.migrate(database);
+        await database.execAsync(`PRAGMA user_version = ${migration.version};`);
+      });
+    } catch (error) {
+      throw new DatabaseMigrationError(
+        'DATABASE_MIGRATION_FAILED',
+        'Database migration failed.',
+        currentVersion,
+        migration.version,
+        { cause: error },
+      );
+    }
     currentVersion = migration.version;
   }
 
@@ -55,7 +99,12 @@ async function readSchemaVersion(database: MigrationDatabase) {
   const version = Number(row?.user_version ?? 0);
 
   if (!Number.isSafeInteger(version) || version < 0) {
-    throw new Error('Database schema version is invalid.');
+    throw new DatabaseMigrationError(
+      'DATABASE_SCHEMA_VERSION_INVALID',
+      'Database schema version is invalid.',
+      null,
+      DATABASE_SCHEMA_VERSION,
+    );
   }
 
   return version;

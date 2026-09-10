@@ -4,9 +4,11 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import {
   DATABASE_SCHEMA_VERSION,
+  DatabaseMigrationError,
   migrateDatabase,
   type MigrationDatabase,
 } from '../src/db/migrations.ts';
+import { createDatabaseStartupDiagnostic } from '../src/db/database-diagnostics.ts';
 
 const schemaV1 = readFileSync('tests/fixtures/database-schema-v1.sql', 'utf8');
 const schemaV2 = readFileSync('tests/fixtures/database-schema-v2.sql', 'utf8');
@@ -70,11 +72,40 @@ test('a failed migration rolls back schema changes and preserves original data',
   fixture.exec(schemaV1);
   fixture.exec(sampleRecipeSql);
 
-  await assert.rejects(() => migrateDatabase(fixture), /Injected migration failure/);
+  await assert.rejects(
+    () => migrateDatabase(fixture),
+    (error) =>
+      error instanceof DatabaseMigrationError &&
+      error.code === 'DATABASE_MIGRATION_FAILED' &&
+      error.fromVersion === 1 &&
+      error.toVersion === 2,
+  );
 
   assert.equal(fixture.version(), 1);
   assert.equal(fixture.columnNames('user_recipes').includes('enabled'), false);
   assert.deepEqual(fixture.sampleRecipe(false), { id: 'recipe-1', title: 'Preserved recipe' });
+});
+
+test('startup diagnostics expose only recovery metadata', () => {
+  const secret = 'AIza-secret-key-that-must-never-appear';
+  const error = new DatabaseMigrationError(
+    'DATABASE_MIGRATION_FAILED',
+    `Failed near ingredient data and ${secret}`,
+    1,
+    2,
+  );
+
+  const diagnostic = createDatabaseStartupDiagnostic(error, new Date('2026-09-10T12:00:00.000Z'));
+  const serialized = JSON.stringify(diagnostic);
+
+  assert.deepEqual(diagnostic, {
+    code: 'DATABASE_MIGRATION_FAILED',
+    occurredAt: '2026-09-10T12:00:00.000Z',
+    fromVersion: 1,
+    targetVersion: 2,
+  });
+  assert.equal(serialized.includes(secret), false);
+  assert.equal(serialized.includes('ingredient'), false);
 });
 
 const sampleRecipeSql = `
