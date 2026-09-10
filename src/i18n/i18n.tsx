@@ -95,7 +95,7 @@ const zh = {
   'home.eyebrow': 'FRIDGECHEF',
   'home.title': '是啊！吃什么',
   'home.brandMark': '是啊！吃什么图标',
-  'home.minimalSubtitle': '根据冰箱里的食材，帮你整理三道今晚能做的菜。',
+  'home.minimalSubtitle': '根据现有食材，为你推荐合适的菜谱',
   'home.generate': '获取菜谱推荐',
   'home.regenerate': '重新推荐',
   'home.generateHint': '进入推荐页面并明确生成一批新推荐',
