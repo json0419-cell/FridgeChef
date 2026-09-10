@@ -116,7 +116,7 @@ Deliverables:
 - Semantic light/dark design tokens and reusable accessible primitives.
 - Four-destination bottom navigation: Home, Fridge, Recommendations, and My.
 - Home screen that prioritizes the next action: confirm ingredients or continue to Recommendations.
-- An intentionally minimal Home screen whose primary action explicitly generates Recommendations, whose secondary action opens Fridge, and whose summary shows at most three safe cached results.
+- An intentionally minimal and responsive Home screen whose stable primary action explicitly generates Recommendations, whose secondary action opens Fridge, and which leaves current and cached result presentation to Recommendations.
 - Opening the Recommendations destination directly never calls Gemini; only the explicit Home generate action or an explicit action inside Recommendations may create a new batch.
 - Localized Chinese and English copy using the approved product names.
 - Loading, empty, error, disabled, and representative populated states.
