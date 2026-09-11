@@ -2,14 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   ApiKeyMigrationError,
+  clearStoredApiKey,
   credentialStorageKey,
+  credentialVerificationStorageKey,
   getOrMigrateApiKey,
+  isStoredApiKeyVerified,
+  markStoredApiKeyVerified,
   saveSecureApiKey,
   type CredentialStore,
   type OrdinaryStore,
 } from '../src/storage/api-key-storage.ts';
 
 const secureKey = credentialStorageKey('gemini');
+const verificationKey = credentialVerificationStorageKey('gemini');
 const legacyKey = 'gemini_api_key';
 const settingsKey = 'chi_shen_me.settings';
 
@@ -98,6 +103,44 @@ test('saving an API key verifies secure storage and removes legacy copies', asyn
 
   assert.equal(await secureStore.getItem(secureKey), 'new-secret');
   assert.equal(await ordinaryStore.getItem(legacyKey), null);
+});
+
+test('a saved API key remains unverified until its live test succeeds', async () => {
+  const secureStore = new MemoryStore({ [secureKey]: 'saved-secret' });
+
+  assert.equal(await isStoredApiKeyVerified('gemini', secureStore), false);
+
+  await markStoredApiKeyVerified('gemini', secureStore);
+
+  assert.equal(await isStoredApiKeyVerified('gemini', secureStore), true);
+  assert.notEqual(await secureStore.getItem(verificationKey), 'saved-secret');
+});
+
+test('verification is bound to the exact saved API key', async () => {
+  const secureStore = new MemoryStore({ [secureKey]: 'first-secret' });
+
+  await markStoredApiKeyVerified('gemini', secureStore);
+  await secureStore.setItem(secureKey, 'second-secret');
+
+  assert.equal(await isStoredApiKeyVerified('gemini', secureStore), false);
+});
+
+test('clearing an API key removes verification before the credential', async () => {
+  const operations: string[] = [];
+  const secureStore = new MemoryStore(
+    { [secureKey]: 'saved-secret', [verificationKey]: 'fingerprint' },
+    operations,
+    'secure',
+  );
+  const ordinaryStore = new MemoryStore({}, operations, 'ordinary');
+
+  await clearStoredApiKey('gemini', secureStore, ordinaryStore);
+
+  assert.equal(await secureStore.getItem(secureKey), null);
+  assert.equal(await secureStore.getItem(verificationKey), null);
+  assert.ok(
+    operations.indexOf(`secure:remove:${verificationKey}`) < operations.indexOf(`secure:remove:${secureKey}`),
+  );
 });
 
 class MemoryStore implements CredentialStore, OrdinaryStore {

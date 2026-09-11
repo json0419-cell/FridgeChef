@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { AiProvider } from '../types';
 
 export interface CredentialStore {
@@ -77,11 +79,41 @@ export async function clearStoredApiKey(
 ): Promise<void> {
   const legacySnapshot = await readLegacySnapshot(provider, ordinaryStore);
   await removeLegacySnapshot(legacySnapshot, ordinaryStore);
+  await secureStore.removeItem(credentialVerificationStorageKey(provider));
   await secureStore.removeItem(credentialStorageKey(provider));
+}
+
+export async function markStoredApiKeyVerified(
+  provider: AiProvider,
+  secureStore: CredentialStore,
+): Promise<void> {
+  const apiKey = normalizeApiKey(await secureStore.getItem(credentialStorageKey(provider)));
+  if (!apiKey) {
+    throw new Error('A saved API key is required before verification.');
+  }
+
+  await writeAndVerifySecureValue(
+    credentialVerificationStorageKey(provider),
+    verificationFingerprint(apiKey),
+    secureStore,
+  );
+}
+
+export async function isStoredApiKeyVerified(
+  provider: AiProvider,
+  secureStore: CredentialStore,
+): Promise<boolean> {
+  const apiKey = normalizeApiKey(await secureStore.getItem(credentialStorageKey(provider)));
+  const storedFingerprint = await secureStore.getItem(credentialVerificationStorageKey(provider));
+  return Boolean(apiKey && storedFingerprint === verificationFingerprint(apiKey));
 }
 
 export function credentialStorageKey(provider: AiProvider) {
   return `chi_shen_me.api_key.${provider}`;
+}
+
+export function credentialVerificationStorageKey(provider: AiProvider) {
+  return `chi_shen_me.api_key_verification.${provider}.v1`;
 }
 
 async function writeAndVerifySecureValue(
@@ -211,6 +243,10 @@ function removeSettingsCredentials(settings: Record<string, unknown>) {
 
 function normalizeApiKey(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function verificationFingerprint(apiKey: string) {
+  return bytesToHex(sha256(utf8ToBytes(`chishenme-api-key-verification-v1:${apiKey}`)));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

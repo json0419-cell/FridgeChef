@@ -4,6 +4,8 @@ import type { AiProvider, AppSettings } from '../types';
 import {
   clearStoredApiKey,
   getOrMigrateApiKey,
+  isStoredApiKeyVerified,
+  markStoredApiKeyVerified,
   saveSecureApiKey,
   type CredentialStore,
   type OrdinaryStore,
@@ -92,6 +94,15 @@ export async function clearApiKey(provider: AiProvider): Promise<void> {
 export async function hasApiKey(provider: AiProvider): Promise<boolean> {
   const key = await getApiKey(provider);
   return Boolean(key);
+}
+
+export async function markApiKeyVerified(provider: AiProvider): Promise<void> {
+  await markStoredApiKeyVerified(provider, credentialStore);
+}
+
+export async function hasVerifiedApiKey(provider: AiProvider): Promise<boolean> {
+  await getOrMigrateApiKey(provider, credentialStore, ordinaryStore);
+  return isStoredApiKeyVerified(provider, credentialStore);
 }
 
 function normalizeServings(value: unknown) {

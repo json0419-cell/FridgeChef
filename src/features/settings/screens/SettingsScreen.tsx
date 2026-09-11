@@ -21,7 +21,14 @@ import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { testProviderConnection } from '../../../ai/providerAdapter';
 import { useI18n, type LanguagePreference } from '../../../i18n/i18n';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
-import { clearApiKey, getApiKey, getSettings, saveApiKey, saveSettings } from '../../../storage/settingsStorage';
+import {
+  clearApiKey,
+  getApiKey,
+  getSettings,
+  markApiKeyVerified,
+  saveApiKey,
+  saveSettings,
+} from '../../../storage/settingsStorage';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../../../types';
 
@@ -201,6 +208,11 @@ export function SettingsScreen({ navigation }: Props) {
     try {
       const key = apiKey.trim() || (await getApiKey('gemini')) || '';
       await testProviderConnection('gemini', key);
+      await saveApiKey('gemini', key);
+      await markApiKeyVerified('gemini');
+      setApiKey(key);
+      setSavedApiKeyValue(key);
+      setSavedKey(true);
       showFeedback({ tone: 'success', title: t('settings.connectionSuccess'), message: t('common.gemini') });
     } catch (error) {
       showFeedback({ tone: 'error', title: t('settings.connectionFailed'), message: formatError(error, t) });
