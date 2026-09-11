@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { BookOpen, ChevronRight, History, Library, Settings } from 'lucide-react-native';
+import { BookOpen, ChevronRight, Database, History, Library, Settings } from 'lucide-react-native';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useI18n } from '../../../i18n/i18n';
@@ -63,6 +63,13 @@ export function MyScreen({ navigation }: Props) {
             icon={Settings}
             onPress={() => navigation.navigate('Settings')}
             title={t('nav.settings')}
+          />
+          <MenuItem
+            colors={colors}
+            description={t('my.dataManagementDescription')}
+            icon={Database}
+            onPress={() => navigation.navigate('DataManagement')}
+            title={t('nav.dataManagement')}
           />
         </View>
       </ScrollView>

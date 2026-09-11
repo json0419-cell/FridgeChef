@@ -29,6 +29,10 @@ export async function removeInstalledDataset(datasetId: string): Promise<void> {
   await saveRegistry(datasets.filter((item) => item.id !== datasetId));
 }
 
+export async function clearInstalledDatasetRegistry(): Promise<void> {
+  await AsyncStorage.removeItem(DATASET_REGISTRY_KEY);
+}
+
 export async function setActiveDataset(datasetId: string): Promise<void> {
   const datasets = await listInstalledDatasets();
   await saveRegistry(selectOnlyDataset(datasets, datasetId));

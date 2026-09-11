@@ -32,6 +32,7 @@ const zh = {
   'nav.recipeDetail': '菜谱详情',
   'nav.history': '历史',
   'nav.settings': '设置',
+  'nav.dataManagement': '本机数据管理',
   'nav.privacyPolicy': '隐私政策与数据披露',
   'nav.datasetLibrary': '菜谱库',
   'nav.userRecipeLibraries': '我的菜谱库',
@@ -43,6 +44,7 @@ const zh = {
   'my.personalRecipesDescription': '整理你手动录入或从 YouTube 保存的菜谱。',
   'my.historyDescription': '查看做过的菜，并控制近期重复推荐。',
   'my.settingsDescription': '管理语言、Gemini、隐私和本机数据。',
+  'my.dataManagementDescription': '按类别清除缓存、食材、记录、下载内容或全部本机数据。',
   'app.loadingDatabase': '正在准备本地数据库...',
   'app.startFailed': '启动失败',
   'app.databaseInitFailed': '数据库初始化失败',
@@ -98,6 +100,34 @@ const zh = {
   'settings.privacyTitle': '隐私与 AI 数据',
   'settings.privacySummary': '查看哪些数据保存在本机、哪些内容会在使用 AI 时发送给 Google，并管理你的同意。',
   'settings.openPrivacyPolicy': '查看隐私政策与数据披露',
+  'dataManagement.subtitle': '每项操作都有独立范围。除“清除全部”外，不会删除其他类别的数据。',
+  'dataManagement.cachesTitle': '推荐缓存',
+  'dataManagement.cachesDescription': '清除已保存的推荐结果和可重新生成的个人菜谱索引。',
+  'dataManagement.ingredientsTitle': '冰箱食材',
+  'dataManagement.ingredientsDescription': '清除冰箱中已经确认保存的全部食材。',
+  'dataManagement.historyTitle': '做饭历史',
+  'dataManagement.historyDescription': '清除全部做饭记录和近期去重依据。',
+  'dataManagement.personalRecipesTitle': '个人菜谱',
+  'dataManagement.personalRecipesDescription': '清除个人菜谱、个人菜谱库和对应本地索引。',
+  'dataManagement.downloadedPacksTitle': '已下载菜谱包',
+  'dataManagement.downloadedPacksDescription': '删除本机下载的 DatasetPacks 和安装记录。',
+  'dataManagement.modelTitle': 'BGE-M3 模型',
+  'dataManagement.modelDescription': '删除本机模型文件和安装记录；再次推荐前需要重新下载。',
+  'dataManagement.apiKeyTitle': 'Gemini API Key',
+  'dataManagement.apiKeyDescription': '从 SecureStore 清除 Gemini API Key。',
+  'dataManagement.allUserDataTitle': '全部本机用户数据',
+  'dataManagement.allUserDataDescription': '清除以上全部内容，并重置偏好、AI 数据同意和语言选择。内置基础菜谱不会删除。',
+  'dataManagement.clearAction': '清除',
+  'dataManagement.confirmTitle': '确认清除“{name}”？',
+  'dataManagement.confirmBody': '只会清除这个类别，不会删除其他类别的数据。此操作无法撤销。',
+  'dataManagement.confirmAllBody': '将清除所有本机用户数据并重置设置。内置基础菜谱会保留。此操作无法撤销。',
+  'dataManagement.confirmAction': '确认清除',
+  'dataManagement.successTitle': '清除完成',
+  'dataManagement.successBody': '“{name}”已经清除。',
+  'dataManagement.failureTitle': '清除失败',
+  'dataManagement.failureBody': '没有继续删除其他类别。请重试。',
+  'dataManagement.partialTitle': '部分数据未能清除',
+  'dataManagement.partialBody': '应用已尝试清除全部类别，但部分操作失败。请逐项重试。',
   'recommendations.aiConsentRequired': '你已取消 AI 数据发送，本次没有调用 Gemini。',
   'home.eyebrow': 'FRIDGECHEF',
   'home.title': '是啊！吃什么',
@@ -575,6 +605,7 @@ const en: Record<TranslationKey, string> = {
   'nav.recipeDetail': 'Recipe Detail',
   'nav.history': 'History',
   'nav.settings': 'Settings',
+  'nav.dataManagement': 'Local Data Management',
   'nav.privacyPolicy': 'Privacy & Data Disclosure',
   'nav.datasetLibrary': 'Recipe Library',
   'nav.userRecipeLibraries': 'My Recipe Libraries',
@@ -586,6 +617,7 @@ const en: Record<TranslationKey, string> = {
   'my.personalRecipesDescription': 'Organize recipes you entered or saved from YouTube.',
   'my.historyDescription': 'Review cooked meals and control recent repeats.',
   'my.settingsDescription': 'Manage language, Gemini, privacy, and local data.',
+  'my.dataManagementDescription': 'Clear caches, ingredients, history, downloads, or all local data by category.',
   'app.loadingDatabase': 'Preparing local database...',
   'app.startFailed': 'Startup failed',
   'app.databaseInitFailed': 'Database initialization failed',
@@ -641,6 +673,34 @@ const en: Record<TranslationKey, string> = {
   'settings.privacyTitle': 'Privacy and AI Data',
   'settings.privacySummary': 'See what stays on this device, what is sent to Google when you use AI, and manage your consent.',
   'settings.openPrivacyPolicy': 'View Privacy Policy & Data Disclosure',
+  'dataManagement.subtitle': 'Each action has an isolated scope. Only Clear All removes data from other categories.',
+  'dataManagement.cachesTitle': 'Recommendation caches',
+  'dataManagement.cachesDescription': 'Clear saved recommendation results and regenerable personal recipe indexes.',
+  'dataManagement.ingredientsTitle': 'Fridge ingredients',
+  'dataManagement.ingredientsDescription': 'Clear every confirmed ingredient saved in your fridge.',
+  'dataManagement.historyTitle': 'Cooking history',
+  'dataManagement.historyDescription': 'Clear all cooked-recipe records and recent-repeat data.',
+  'dataManagement.personalRecipesTitle': 'Personal recipes',
+  'dataManagement.personalRecipesDescription': 'Clear personal recipes, personal libraries, and their local indexes.',
+  'dataManagement.downloadedPacksTitle': 'Downloaded recipe packs',
+  'dataManagement.downloadedPacksDescription': 'Delete downloaded DatasetPacks and their installation records.',
+  'dataManagement.modelTitle': 'BGE-M3 model',
+  'dataManagement.modelDescription': 'Delete local model files and installation records. A new download is required before recommending again.',
+  'dataManagement.apiKeyTitle': 'Gemini API Key',
+  'dataManagement.apiKeyDescription': 'Remove the Gemini API key from SecureStore.',
+  'dataManagement.allUserDataTitle': 'All local user data',
+  'dataManagement.allUserDataDescription': 'Clear everything above and reset preferences, AI data consent, and language selection. Built-in recipes remain.',
+  'dataManagement.clearAction': 'Clear',
+  'dataManagement.confirmTitle': 'Clear “{name}”?',
+  'dataManagement.confirmBody': 'Only this category will be cleared. Other data categories will remain. This cannot be undone.',
+  'dataManagement.confirmAllBody': 'All local user data and settings will be cleared. Built-in recipes will remain. This cannot be undone.',
+  'dataManagement.confirmAction': 'Clear now',
+  'dataManagement.successTitle': 'Clear complete',
+  'dataManagement.successBody': '“{name}” has been cleared.',
+  'dataManagement.failureTitle': 'Clear failed',
+  'dataManagement.failureBody': 'No other category was cleared. Try again.',
+  'dataManagement.partialTitle': 'Some data could not be cleared',
+  'dataManagement.partialBody': 'The app attempted every category, but some operations failed. Retry those categories individually.',
   'recommendations.aiConsentRequired': 'You canceled AI data sharing, so Gemini was not called.',
   'home.eyebrow': 'FRIDGECHEF',
   'home.title': 'FridgeChef',
@@ -1097,6 +1157,7 @@ interface I18nContextValue {
   languagePreference: LanguagePreference;
   setLanguage: (language: LanguagePreference) => Promise<void>;
   setLanguagePreference: (language: LanguagePreference) => Promise<void>;
+  resetLanguagePreference: () => Promise<void>;
   t: (key: TranslationKey, values?: TranslationValues) => string;
 }
 
@@ -1116,12 +1177,17 @@ export function I18nProvider({ children }: PropsWithChildren) {
       setLanguagePreferenceState(nextLanguage);
       await AsyncStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
     };
+    const resetLanguagePreference = async () => {
+      setLanguagePreferenceState('system');
+      await clearStoredLanguagePreference();
+    };
 
     return {
       language,
       languagePreference,
       setLanguage: setLanguagePreference,
       setLanguagePreference,
+      resetLanguagePreference,
       t: (key, values) => interpolate(dictionaries[language][key] ?? dictionaries.zh[key] ?? key, values),
     };
   }, [languagePreference, systemLanguage]);
@@ -1140,6 +1206,10 @@ export function useI18n() {
 async function getStoredLanguagePreference(): Promise<LanguagePreference> {
   const raw = await AsyncStorage.getItem(LANGUAGE_STORAGE_KEY);
   return raw === 'en' || raw === 'zh' || raw === 'system' ? raw : 'system';
+}
+
+export async function clearStoredLanguagePreference(): Promise<void> {
+  await AsyncStorage.removeItem(LANGUAGE_STORAGE_KEY);
 }
 
 function resolveLanguage(languagePreference: LanguagePreference, systemLanguage: Language): Language {

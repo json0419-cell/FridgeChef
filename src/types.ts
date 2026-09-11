@@ -341,6 +341,7 @@ export type MainTabParamList = {
 export type RootNativeStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Settings: undefined;
+  DataManagement: undefined;
   PrivacyPolicy: undefined;
 };
 

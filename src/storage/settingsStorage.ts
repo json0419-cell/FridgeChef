@@ -68,6 +68,10 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   );
 }
 
+export async function clearSettings(): Promise<void> {
+  await AsyncStorage.removeItem(SETTINGS_KEY);
+}
+
 export async function getApiKey(provider: AiProvider): Promise<string | null> {
   return getOrMigrateApiKey(provider, credentialStore, ordinaryStore);
 }

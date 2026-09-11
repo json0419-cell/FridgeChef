@@ -25,7 +25,7 @@ import { HistoryScreen } from '../features/history';
 import { HomeScreen } from '../features/home';
 import { MyScreen } from '../features/my';
 import { RecommendationsScreen } from '../features/recommendations';
-import { PrivacyPolicyScreen, SettingsScreen } from '../features/settings';
+import { DataManagementScreen, PrivacyPolicyScreen, SettingsScreen } from '../features/settings';
 import { spacing, type AppColorTokens, useAppTheme } from '../shared/theme/theme';
 import type {
   FridgeStackParamList,
@@ -180,6 +180,11 @@ function AppContent() {
         <RootStack.Navigator screenOptions={createStackScreenOptions(colors)}>
           <RootStack.Screen name="MainTabs" component={MainTabsNavigator} options={{ headerShown: false }} />
           <RootStack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
+          <RootStack.Screen
+            name="DataManagement"
+            component={DataManagementScreen}
+            options={{ title: t('nav.dataManagement') }}
+          />
           <RootStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: t('nav.privacyPolicy') }} />
         </RootStack.Navigator>
       </NavigationContainer>

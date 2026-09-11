@@ -14,7 +14,9 @@
     "src/downloads/http-range.ts",
     "src/downloads/pack-security.ts",
     "src/downloads/streaming-sha256.ts",
-    "src/ai/geminiConfig.ts"
+    "src/ai/geminiConfig.ts",
+    "src/storage/data-cleanup-policy.ts",
+    "src/db/data-cleanup-database.ts"
   ],
   "exclude": []
 }

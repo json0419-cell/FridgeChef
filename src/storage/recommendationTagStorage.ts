@@ -22,6 +22,10 @@ export async function saveRecommendationRequestTags(language: Language, tags: st
   );
 }
 
+export async function clearRecommendationRequestTags(): Promise<void> {
+  await AsyncStorage.removeItem(RECOMMENDATION_TAGS_KEY);
+}
+
 async function readStoredTags(): Promise<StoredRecommendationTags> {
   const raw = await AsyncStorage.getItem(RECOMMENDATION_TAGS_KEY);
   if (!raw) {

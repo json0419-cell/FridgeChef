@@ -29,6 +29,10 @@ export async function saveInstalledEmbeddingModel(model: InstalledEmbeddingModel
   await saveRegistry(normalizeActiveModel(next, model.active ? model.id : undefined));
 }
 
+export async function clearInstalledEmbeddingModelRegistry(): Promise<void> {
+  await AsyncStorage.removeItem(MODEL_REGISTRY_KEY);
+}
+
 export function createInstalledEmbeddingModelFromManifest(
   manifest: EmbeddingModelPackManifest,
   localRootUri: string,
