@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, type St
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { CheckCircle2, ChevronDown, ChevronRight, Circle } from 'lucide-react-native';
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { refineRagRecommendationsWithProvider } from '../../../ai/recommendationRefiner';
@@ -21,6 +21,8 @@ import {
   getRecommendationInputSnapshot,
   normalizeRecommendationSignatureText as normalizeSignatureText,
 } from '../recommendation-input';
+import { loadRecommendationReadiness } from '../recommendation-readiness';
+import type { RecommendationReadiness } from '../recommendation-readiness-policy';
 import type {
   AppSettings,
   RecommendationsStackScreenProps,
@@ -44,6 +46,13 @@ type RequestTagCategory = {
 const RAG_SEARCH_CANDIDATES = 30;
 const RAG_REFINE_CANDIDATES = 30;
 const GEMINI_RETRY_COUNT = 3;
+const EMPTY_READINESS: RecommendationReadiness = {
+  consentReady: false,
+  credentialReady: false,
+  modelReady: false,
+  ready: false,
+  sourceReady: false,
+};
 const REQUEST_TAGS_ZH = [
   '广东口味',
   '清淡少油',
@@ -102,6 +111,8 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [modelDownloading, setModelDownloading] = useState(false);
   const [modelProgress, setModelProgress] = useState<ModelDownloadProgress | null>(null);
+  const [readiness, setReadiness] = useState<RecommendationReadiness>(EMPTY_READINESS);
+  const [readinessLoading, setReadinessLoading] = useState(true);
   const [recommendationRequest, setRecommendationRequestState] = useState('');
   const [requestTags, setRequestTags] = useState(() => (language === 'en' ? REQUEST_TAGS_EN : REQUEST_TAGS_ZH));
   const [newRequestTag, setNewRequestTag] = useState('');
@@ -141,6 +152,20 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   };
 
   const getCurrentRecommendationRequest = useCallback(() => recommendationRequestRef.current.trim(), []);
+
+  const refreshReadiness = useCallback(async () => {
+    setReadinessLoading(true);
+    try {
+      const next = await loadRecommendationReadiness();
+      setReadiness(next);
+      return next;
+    } catch {
+      setReadiness(EMPTY_READINESS);
+      return EMPTY_READINESS;
+    } finally {
+      setReadinessLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -222,6 +247,12 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     setRefineMessage(null);
 
     try {
+      const currentReadiness = await refreshReadiness();
+      if (!currentReadiness.ready) {
+        setRefineMessage(t('recommendations.completeSetupFirst'));
+        return;
+      }
+
       const extraPreference = getCurrentRecommendationRequest();
       const [apiKey, snapshot] = await Promise.all([
         getApiKey('gemini'),
@@ -312,7 +343,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
     }
-  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, t]);
+  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refreshReadiness, t]);
 
   const refreshRecommendations = useCallback(async () => {
     sentRagCandidateKeysRef.current = new Set();
@@ -330,6 +361,14 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     setRefineMessage(null);
 
     try {
+      const currentReadiness = await refreshReadiness();
+      if (!currentReadiness.ready) {
+        if (!silent) {
+          setRefineMessage(t('recommendations.completeSetupFirst'));
+        }
+        return;
+      }
+
       const extraPreference = getCurrentRecommendationRequest();
       const requestChanged = normalizeSignatureText(extraPreference) !== normalizeSignatureText(activeRecommendationRequestRef.current);
       const [apiKey, snapshot] = await Promise.all([
@@ -460,7 +499,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refinedRecommendations, showFeedback, t]);
+  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refinedRecommendations, refreshReadiness, showFeedback, t]);
 
   const changeBatch = useCallback(async () => {
     if (loading || loadingMore) {
@@ -551,6 +590,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       let active = true;
 
       void (async () => {
+        await refreshReadiness();
         const generationRequestId = route.params?.generationRequestId;
         if (generationRequestId && handledGenerationRequestRef.current !== generationRequestId) {
           handledGenerationRequestRef.current = generationRequestId;
@@ -576,7 +616,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       return () => {
         active = false;
       };
-    }, [getCurrentRecommendationRequest, hydrateFromCache, language, navigation, refreshRecommendations, route.params?.generationRequestId, t]),
+    }, [getCurrentRecommendationRequest, hydrateFromCache, language, navigation, refreshReadiness, refreshRecommendations, route.params?.generationRequestId, t]),
   );
 
   const installOnnxModel = async () => {
@@ -674,6 +714,15 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
+            <ReadinessChecklist
+              loading={readinessLoading}
+              readiness={readiness}
+              onOpenConsent={() => navigation.navigate('PrivacyPolicy')}
+              onOpenCredential={() => navigation.navigate('Settings')}
+              onOpenModel={() => void installOnnxModel()}
+              onOpenSource={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
+              t={t}
+            />
             <View style={styles.modeRow}>
               <RequestTagPill
                 label={isFridgeEmpty ? t('recommendations.inspirationMode') : t('recommendations.ingredientsCount', { count: ingredientCount })}
@@ -743,12 +792,13 @@ export function RecommendationsScreen({ navigation, route }: Props) {
                 title={t('recommendations.refresh')}
                 onPress={refreshRecommendations}
                 loading={loading}
+                disabled={readinessLoading || !readiness.ready}
               />
               <TextAction
                 title={t('recommendations.changeBatch')}
                 onPress={changeBatch}
                 loading={loadingMore}
-                disabled={loading || ragResult?.mode !== 'rag'}
+                disabled={loading || !readiness.ready || ragResult?.mode !== 'rag'}
               />
             </View>
             {isFridgeEmpty ? (
@@ -891,11 +941,78 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           title={t('recommendations.applyRequest')}
           onPress={applyRecommendationRequest}
           loading={loading}
-          disabled={loadingMore}
+          disabled={loadingMore || readinessLoading || !readiness.ready}
           style={styles.fixedRequestButton}
         />
       </View>
     </SafeAreaView>
+  );
+}
+
+function ReadinessChecklist({
+  loading,
+  readiness,
+  onOpenConsent,
+  onOpenCredential,
+  onOpenModel,
+  onOpenSource,
+  t,
+}: {
+  loading: boolean;
+  readiness: RecommendationReadiness;
+  onOpenConsent: () => void;
+  onOpenCredential: () => void;
+  onOpenModel: () => void;
+  onOpenSource: () => void;
+  t: TFunction;
+}) {
+  const items = [
+    { key: 'consent', label: t('recommendations.readinessConsent'), ready: readiness.consentReady, onPress: onOpenConsent },
+    { key: 'credential', label: t('recommendations.readinessCredential'), ready: readiness.credentialReady, onPress: onOpenCredential },
+    { key: 'model', label: t('recommendations.readinessModel'), ready: readiness.modelReady, onPress: onOpenModel },
+    { key: 'source', label: t('recommendations.readinessSource'), ready: readiness.sourceReady, onPress: onOpenSource },
+  ];
+
+  return (
+    <AppCard style={[styles.minimalCard, styles.readinessCard]}>
+      <View style={styles.readinessHeader}>
+        <View style={styles.readinessTitleBlock}>
+          <Text style={styles.readinessTitle}>{t('recommendations.readinessTitle')}</Text>
+          <Text style={styles.readinessDetail}>
+            {readiness.ready
+              ? t('recommendations.readinessComplete')
+              : t('recommendations.readinessIncomplete')}
+          </Text>
+        </View>
+        {loading ? <ActivityIndicator color={colors.primary} size="small" /> : null}
+      </View>
+      <View style={styles.readinessList}>
+        {items.map((item) => (
+          <Pressable
+            accessibilityLabel={`${item.label}. ${item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired')}`}
+            accessibilityRole={item.ready ? 'text' : 'button'}
+            disabled={loading || item.ready}
+            key={item.key}
+            onPress={item.onPress}
+            style={({ pressed }) => [
+              styles.readinessRow,
+              pressed && !item.ready && styles.readinessRowPressed,
+            ]}
+          >
+            {item.ready ? (
+              <CheckCircle2 color={colors.primary} size={21} strokeWidth={2.2} />
+            ) : (
+              <Circle color={colors.muted} size={21} strokeWidth={2} />
+            )}
+            <Text style={[styles.readinessLabel, item.ready && styles.readinessLabelReady]}>{item.label}</Text>
+            <Text style={styles.readinessStatus}>
+              {item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired')}
+            </Text>
+            {!item.ready ? <ChevronRight color={colors.muted} size={19} strokeWidth={2} /> : null}
+          </Pressable>
+        ))}
+      </View>
+    </AppCard>
   );
 }
 
@@ -1394,6 +1511,60 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     shadowOpacity: 0,
     elevation: 0,
+  },
+  readinessCard: {
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  readinessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  readinessTitleBlock: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  readinessTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    fontFamily: typography.strong,
+  },
+  readinessDetail: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  readinessList: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  readinessRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  readinessRowPressed: {
+    opacity: 0.68,
+  },
+  readinessLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  readinessLabelReady: {
+    color: colors.primary,
+  },
+  readinessStatus: {
+    color: colors.muted,
+    fontSize: 13,
   },
   actionButton: {
     minHeight: 48,
