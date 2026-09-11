@@ -300,7 +300,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
             : t('recommendations.allFiltered'),
         );
       } catch (error) {
-        console.warn('Gemini recommendation refinement failed', error);
+        console.warn('Gemini recommendation refinement failed');
         const message = formatGeminiRecommendationError(error, t);
         setRefineMessage(message);
       }
@@ -443,7 +443,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           setRefineMessage(t('recommendations.loadedMore', { count: refinedToAppend.length }));
         }
       } catch (error) {
-        console.warn('Gemini recommendation load-more failed', error);
+        console.warn('Gemini recommendation load-more failed');
         if (!silent) {
           const message = formatGeminiRecommendationError(error, t);
           setRefineMessage(message);

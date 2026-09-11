@@ -83,6 +83,15 @@ test('all Gemini feature modules use the unified network client', () => {
   }
 });
 
+test('recommendation logs never serialize caught errors', () => {
+  const source = read('src/features/recommendations/screens/RecommendationsScreen.tsx');
+
+  assert.doesNotMatch(
+    source,
+    /console\.(?:log|warn|error)\([^;]*\berror\b[^;]*\);/s,
+  );
+});
+
 test('model installation commits only after verified downloads complete', () => {
   const source = read('src/rag/model/modelPack.ts');
   const verify = source.indexOf('await downloadAndVerifyModelFile(');
