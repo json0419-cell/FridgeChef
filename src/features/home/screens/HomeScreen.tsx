@@ -3,16 +3,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AlertTriangle, ChevronRight, Refrigerator, Settings2, Sparkles } from 'lucide-react-native';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { listInstalledDatasets } from '../../../datasets/datasetRegistry';
-import { listRecipes } from '../../../db/recipesRepository';
-import { listEnabledUserRecipesWithLibraries } from '../../../db/userRecipesRepository';
 import { useI18n } from '../../../i18n/i18n';
-import { hasAiDataConsent } from '../../../privacy/ai-data-consent';
-import { getActiveEmbeddingModel } from '../../../rag/model/modelRegistry';
 import { radii, spacing, type AppColorTokens, useAppTheme } from '../../../shared/theme/theme';
-import { hasVerifiedApiKey } from '../../../storage/settingsStorage';
 import type { HomeStackScreenProps, Ingredient } from '../../../types';
 import { getRecommendationInputSnapshot } from '../../recommendations/recommendation-input';
+import { loadRecommendationReadiness } from '../../recommendations/recommendation-readiness';
 
 type Props = HomeStackScreenProps<'Home'>;
 type HomePrompt = 'setup' | 'fridge' | 'inventoryError' | null;
@@ -49,31 +44,21 @@ export function HomeScreen({ navigation }: Props) {
     setSnapshot((current) => ({ ...current, error: null, loading: true }));
     const results = await Promise.allSettled([
       getRecommendationInputSnapshot(language),
-      hasVerifiedApiKey('gemini'),
-      hasAiDataConsent(),
-      listInstalledDatasets(),
-      listEnabledUserRecipesWithLibraries(),
-      getActiveEmbeddingModel(),
-      listRecipes(),
+      loadRecommendationReadiness(),
     ]);
 
-    const [inputResult, keyResult, consentResult, datasetsResult, personalResult, modelResult, recipesResult] = results;
+    const [inputResult, readinessResult] = results;
     const input = settledValue(inputResult, null);
-    const datasets = settledValue(datasetsResult, []);
-    const personalRecipes = settledValue(personalResult, []);
-    const baseRecipes = settledValue(recipesResult, []);
+    const readiness = settledValue(readinessResult, null);
 
     setSnapshot({
-      consentReady: settledValue(consentResult, false),
-      error: firstRejectedMessage([inputResult]),
+      consentReady: readiness?.consentReady ?? false,
+      error: firstRejectedMessage(results),
       ingredients: input?.ingredients ?? [],
-      keyReady: settledValue(keyResult, false),
+      keyReady: readiness?.credentialReady ?? false,
       loading: false,
-      modelReady: Boolean(settledValue(modelResult, null)),
-      sourceReady:
-        datasets.some((dataset) => dataset.active && dataset.status === 'installed') ||
-        personalRecipes.length > 0 ||
-        baseRecipes.length > 0,
+      modelReady: readiness?.modelReady ?? false,
+      sourceReady: readiness?.sourceReady ?? false,
     });
   }, [language]);
 

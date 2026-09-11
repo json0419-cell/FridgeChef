@@ -94,9 +94,12 @@ test('recommendation logs never serialize caught errors', () => {
 
 test('Home requires a live-tested Gemini credential', () => {
   const source = read('src/features/home/screens/HomeScreen.tsx');
+  const readiness = read('src/features/recommendations/recommendation-readiness.ts');
 
-  assert.match(source, /hasVerifiedApiKey\('gemini'\)/);
+  assert.match(source, /loadRecommendationReadiness\(\)/);
   assert.doesNotMatch(source, /hasApiKey\('gemini'\)/);
+  assert.match(readiness, /hasVerifiedApiKey\('gemini'\)/);
+  assert.match(readiness, /model\?\.testEmbeddingVerifiedAt/);
 });
 
 test('model installation commits only after verified downloads complete', () => {
