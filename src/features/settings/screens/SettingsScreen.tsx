@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,6 +13,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ScreenCapture from 'expo-screen-capture';
 import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../shared/components/AppLayout';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
@@ -26,6 +28,7 @@ import type { RecommendationDifficultyPreference, SettingsScreenProps } from '..
 type Props = SettingsScreenProps;
 type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 const GEMINI_API_KEY_URL = 'https://aistudio.google.com/app/apikey';
+const CREDENTIAL_SCREEN_CAPTURE_KEY = 'gemini-api-key-settings';
 
 type ConfirmDialogState = {
   title: string;
@@ -36,6 +39,14 @@ type ConfirmDialogState = {
 } | null;
 
 export function SettingsScreen({ navigation }: Props) {
+  useFocusEffect(
+    useCallback(() => {
+      void ScreenCapture.preventScreenCaptureAsync(CREDENTIAL_SCREEN_CAPTURE_KEY);
+      return () => {
+        void ScreenCapture.allowScreenCaptureAsync(CREDENTIAL_SCREEN_CAPTURE_KEY);
+      };
+    }, []),
+  );
   const { language, languagePreference, setLanguagePreference, t } = useI18n();
   const { showFeedback } = useFeedback();
   const [servings, setServings] = useState('2');

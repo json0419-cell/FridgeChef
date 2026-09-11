@@ -30,6 +30,40 @@ test('Android follows the system color scheme', () => {
   );
 });
 
+test('Android backup rules exclude SecureStore credentials', () => {
+  const appConfig = JSON.parse(read('app.json')) as {
+    expo?: { plugins?: Array<string | [string, Record<string, unknown>]> };
+  };
+  const mainManifest = read('android/app/src/main/AndroidManifest.xml');
+  const legacyRules = read('android/app/src/main/res/xml/secure_store_backup_rules.xml');
+  const modernRules = read('android/app/src/main/res/xml/secure_store_data_extraction_rules.xml');
+  const secureStorePlugin = appConfig.expo?.plugins?.find(
+    (plugin): plugin is [string, Record<string, unknown>] => Array.isArray(plugin) && plugin[0] === 'expo-secure-store',
+  );
+
+  assert.equal(secureStorePlugin?.[1].configureAndroidBackup, true);
+  assert.match(mainManifest, /android:fullBackupContent="@xml\/secure_store_backup_rules"/);
+  assert.match(mainManifest, /android:dataExtractionRules="@xml\/secure_store_data_extraction_rules"/);
+  assert.match(legacyRules, /<exclude domain="sharedpref" path="SecureStore"\s*\/>/);
+  assert.equal((modernRules.match(/<exclude domain="sharedpref" path="SecureStore"\s*\/>/g) ?? []).length, 2);
+});
+
+test('the API key settings screen blocks capture without media permissions', () => {
+  const appConfig = JSON.parse(read('app.json')) as {
+    expo?: { android?: { blockedPermissions?: string[] } };
+  };
+  const settingsScreen = read('src/features/settings/screens/SettingsScreen.tsx');
+  const packageJson = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+
+  assert.equal(packageJson.dependencies?.['expo-screen-capture'], '~57.0.2');
+  assert.match(settingsScreen, /preventScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.match(settingsScreen, /allowScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.equal(
+    appConfig.expo?.android?.blockedPermissions?.includes('android.permission.READ_MEDIA_IMAGES'),
+    true,
+  );
+});
+
 test('all Gemini feature modules use the unified network client', () => {
   const featureFiles = [
     'src/ai/geminiAdapter.ts',

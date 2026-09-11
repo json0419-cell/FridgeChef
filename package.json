@@ -22,6 +22,7 @@
     "expo-file-system": "~57.0.6",
     "expo-image-picker": "~57.0.15",
     "expo-linear-gradient": "~57.0.1",
+    "expo-screen-capture": "~57.0.2",
     "expo-secure-store": "~57.0.3",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
