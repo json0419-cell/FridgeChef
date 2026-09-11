@@ -44,8 +44,12 @@ test('Android backup rules exclude SecureStore credentials', () => {
   assert.equal(secureStorePlugin?.[1].configureAndroidBackup, true);
   assert.match(mainManifest, /android:fullBackupContent="@xml\/secure_store_backup_rules"/);
   assert.match(mainManifest, /android:dataExtractionRules="@xml\/secure_store_data_extraction_rules"/);
+  assert.match(legacyRules, /<include domain="database" path="\."\s*\/>/);
+  assert.equal((modernRules.match(/<include domain="database" path="\."\s*\/>/g) ?? []).length, 2);
   assert.match(legacyRules, /<exclude domain="sharedpref" path="SecureStore"\s*\/>/);
   assert.equal((modernRules.match(/<exclude domain="sharedpref" path="SecureStore"\s*\/>/g) ?? []).length, 2);
+  assert.doesNotMatch(legacyRules, /domain="file"/);
+  assert.doesNotMatch(modernRules, /domain="file"/);
 });
 
 test('the API key settings screen blocks capture without media permissions', () => {
