@@ -92,6 +92,13 @@ test('recommendation logs never serialize caught errors', () => {
   );
 });
 
+test('Home requires a live-tested Gemini credential', () => {
+  const source = read('src/features/home/screens/HomeScreen.tsx');
+
+  assert.match(source, /hasVerifiedApiKey\('gemini'\)/);
+  assert.doesNotMatch(source, /hasApiKey\('gemini'\)/);
+});
+
 test('model installation commits only after verified downloads complete', () => {
   const source = read('src/rag/model/modelPack.ts');
   const verify = source.indexOf('await downloadAndVerifyModelFile(');

@@ -10,7 +10,7 @@ import { useI18n } from '../../../i18n/i18n';
 import { hasAiDataConsent } from '../../../privacy/ai-data-consent';
 import { getActiveEmbeddingModel } from '../../../rag/model/modelRegistry';
 import { radii, spacing, type AppColorTokens, useAppTheme } from '../../../shared/theme/theme';
-import { hasApiKey } from '../../../storage/settingsStorage';
+import { hasVerifiedApiKey } from '../../../storage/settingsStorage';
 import type { HomeStackScreenProps, Ingredient } from '../../../types';
 import { getRecommendationInputSnapshot } from '../../recommendations/recommendation-input';
 
@@ -49,7 +49,7 @@ export function HomeScreen({ navigation }: Props) {
     setSnapshot((current) => ({ ...current, error: null, loading: true }));
     const results = await Promise.allSettled([
       getRecommendationInputSnapshot(language),
-      hasApiKey('gemini'),
+      hasVerifiedApiKey('gemini'),
       hasAiDataConsent(),
       listInstalledDatasets(),
       listEnabledUserRecipesWithLibraries(),
