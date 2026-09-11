@@ -103,13 +103,15 @@ test('model installation commits only after verified downloads complete', () => 
   const source = read('src/rag/model/modelPack.ts');
   const verify = source.indexOf('await downloadAndVerifyModelFile(');
   const writeManifest = source.indexOf("writeTextFile(new File(stagingDirectory, 'model-pack.json')");
-  const promote = source.indexOf('stagingDirectory.move(new Directory(root, directoryName))');
+  const promote = source.indexOf('stagingDirectory.move(installedDirectory)');
+  const runtimeTest = source.indexOf('await verifyEmbeddingModelRuntime(installedCandidate)');
   const register = source.indexOf('await saveInstalledEmbeddingModel(installed)');
 
   assert.ok(verify >= 0);
   assert.ok(writeManifest > verify, 'manifest must be written after file verification');
   assert.ok(promote > writeManifest, 'staging must be promoted after manifest is written');
-  assert.ok(register > promote, 'registry must be updated after the verified directory is promoted');
+  assert.ok(runtimeTest > promote, 'runtime test must run after the verified directory is promoted');
+  assert.ok(register > runtimeTest, 'registry must be updated after the runtime test passes');
 });
 
 test('privacy policy and in-app disclosure remain present', () => {

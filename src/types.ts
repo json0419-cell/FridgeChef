@@ -227,6 +227,7 @@ export interface InstalledEmbeddingModel {
   modelName: string;
   dimension: number;
   maxLength: number;
+  testEmbeddingVerifiedAt?: string;
 }
 
 export interface VectorSearchResult {

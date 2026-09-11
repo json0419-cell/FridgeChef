@@ -17,6 +17,7 @@ import {
   saveInstalledEmbeddingModel,
 } from './modelRegistry';
 import { validateEmbeddingModelManifest } from './model-manifest';
+import { assertValidTestEmbedding } from './model-runtime-validation';
 
 export { validateEmbeddingModelManifest } from './model-manifest';
 
@@ -101,16 +102,22 @@ export async function downloadEmbeddingModelPack(
       previousDirectory.move(backupDirectory);
     }
 
-    stagingDirectory.move(new Directory(root, directoryName));
+    const installedDirectory = new Directory(root, directoryName);
+    stagingDirectory.move(installedDirectory);
     committed = true;
 
-    const installed = createInstalledEmbeddingModelFromManifest(
+    const installedCandidate = createInstalledEmbeddingModelFromManifest(
       manifest,
-      stagingDirectory.uri,
-      new File(stagingDirectory, 'model-pack.json').uri,
+      installedDirectory.uri,
+      new File(installedDirectory, 'model-pack.json').uri,
       normalizedManifestUrl,
       existingModel?.active ?? existingModels.length === 0,
     );
+    await verifyEmbeddingModelRuntime(installedCandidate);
+    const installed: InstalledEmbeddingModel = {
+      ...installedCandidate,
+      testEmbeddingVerifiedAt: new Date().toISOString(),
+    };
     await saveInstalledEmbeddingModel(installed);
 
     try {
@@ -130,6 +137,12 @@ export async function downloadEmbeddingModelPack(
     // Before commit the isolated staging directory is deliberately kept as a resumable cache.
     throw error;
   }
+}
+
+async function verifyEmbeddingModelRuntime(model: InstalledEmbeddingModel) {
+  const { BgeM3OnnxEmbedder } = await import('../embedding/BgeM3OnnxEmbedder');
+  const vector = await new BgeM3OnnxEmbedder(model).embed('今晚吃什么');
+  assertValidTestEmbedding(vector, model.dimension);
 }
 
 export async function fetchEmbeddingModelManifest(manifestUrl: string): Promise<EmbeddingModelPackManifest> {
