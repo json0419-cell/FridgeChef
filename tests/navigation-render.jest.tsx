@@ -253,6 +253,7 @@ describe('application navigation behavior', () => {
     await screen.findByText('The fridge is unavailable');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Check fridge' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Fridge unavailable · Check data' })).toBeTruthy();
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
@@ -270,6 +271,7 @@ describe('application navigation behavior', () => {
     const screen = await render(<App />);
     const generate = await screen.findByRole('button', { name: 'Get recipe recommendations' });
     expect(generate.props.accessibilityState).toEqual({ busy: true, disabled: true });
+    expect(screen.getByRole('button', { name: 'Checking fridge…' })).toBeTruthy();
 
     await fireEvent.press(generate);
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();

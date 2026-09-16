@@ -187,7 +187,7 @@ export function HomeScreen({ navigation }: Props) {
               {t('home.geminiUsageHint')}
             </Text>
             <Pressable
-              accessibilityLabel={getFridgeButtonLabel(snapshot.ingredients.length, t)}
+              accessibilityLabel={getFridgeButtonLabel(snapshot, t)}
               accessibilityRole="button"
               onPress={openFridge}
               style={({ pressed }) => ({
@@ -206,7 +206,7 @@ export function HomeScreen({ navigation }: Props) {
             >
               <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
               <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
-                {getFridgeButtonLabel(snapshot.ingredients.length, t)}
+                {getFridgeButtonLabel(snapshot, t)}
               </Text>
             </Pressable>
           </View>
@@ -330,7 +330,10 @@ function getPromptCopy(prompt: HomePrompt, missingSetup: string[], t: ReturnType
   return null;
 }
 
-function getFridgeButtonLabel(count: number, t: ReturnType<typeof useI18n>['t']) {
+function getFridgeButtonLabel(snapshot: HomeSnapshot, t: ReturnType<typeof useI18n>['t']) {
+  if (snapshot.loading) return t('home.fridgeLoadingAction');
+  if (snapshot.error) return t('home.fridgeUnavailableAction');
+  const count = snapshot.ingredients.length;
   if (count === 1) return t('home.fridgeWithOne');
   return count > 0 ? t('home.fridgeWithCount', { count }) : t('home.fridgeEmptyAction');
 }
