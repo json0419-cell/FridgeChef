@@ -373,6 +373,7 @@ export function IngredientChip({
   const [removeFocused, setRemoveFocused] = useState(false);
   const content = (
     <>
+      {selected ? <Text accessible={false} style={styles.chipSelectedIndicator}>✓</Text> : null}
       <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
       {quantity ? <Text style={[styles.chipMeta, selected && styles.chipMetaSelected]}>{unit ? `${quantity} ${unit}` : quantity}</Text> : null}
     </>
@@ -746,6 +747,11 @@ function createFoundationStyles(colors: AppColorTokens) {
   chipLabel: {
     ...typeScale.label,
     color: colors.textPrimary,
+  },
+  chipSelectedIndicator: {
+    ...typeScale.label,
+    color: colors.onPrimary,
+    fontWeight: '900',
   },
   chipLabelSelected: {
     color: colors.onPrimary,

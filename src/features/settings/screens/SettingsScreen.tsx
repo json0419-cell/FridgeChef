@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../shared/components/AppLayout';
-import { Button as ActionButton } from '../../../shared/components/Foundation';
+import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { testProviderConnection } from '../../../ai/providerAdapter';
@@ -65,6 +65,8 @@ export function SettingsScreen({ navigation }: Props) {
   const [savedKey, setSavedKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
+  const [languageButtonFocused, setLanguageButtonFocused] = useState(false);
+  const [focusedLanguagePreference, setFocusedLanguagePreference] = useState<LanguagePreference | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const skipUnsavedApiKeyPromptRef = useRef(false);
   const hasUnsavedApiKey = apiKey.trim() !== savedApiKeyValue;
@@ -223,9 +225,17 @@ export function SettingsScreen({ navigation }: Props) {
             <FieldLabel>{t('settings.language')}</FieldLabel>
             <View style={styles.dropdown}>
               <Pressable
+                accessibilityLabel={t('settings.language')}
                 accessibilityRole="button"
+                accessibilityState={{ expanded: languageMenuOpen }}
+                onBlur={() => setLanguageButtonFocused(false)}
+                onFocus={() => setLanguageButtonFocused(true)}
                 onPress={() => setLanguageMenuOpen((current) => !current)}
-                style={({ pressed }) => [styles.dropdownButton, pressed && styles.dropdownButtonPressed]}
+                style={({ pressed }) => [
+                  styles.dropdownButton,
+                  languageButtonFocused && styles.controlFocused,
+                  pressed && styles.dropdownButtonPressed,
+                ]}
               >
                 <Text style={styles.dropdownButtonText}>{languagePreferenceLabel(languagePreference, t)}</Text>
                 <Text style={styles.dropdownCaret}>{languageMenuOpen ? '^' : 'v'}</Text>
@@ -237,7 +247,10 @@ export function SettingsScreen({ navigation }: Props) {
                     return (
                       <Pressable
                         accessibilityRole="button"
+                        accessibilityState={{ selected }}
                         key={item}
+                        onBlur={() => setFocusedLanguagePreference(null)}
+                        onFocus={() => setFocusedLanguagePreference(item)}
                         onPress={() => {
                           setLanguageMenuOpen(false);
                           void setLanguagePreference(item);
@@ -245,10 +258,12 @@ export function SettingsScreen({ navigation }: Props) {
                         style={({ pressed }) => [
                           styles.dropdownOption,
                           selected && styles.dropdownOptionActive,
+                          focusedLanguagePreference === item && styles.controlFocused,
                           pressed && styles.dropdownOptionPressed,
                         ]}
                       >
                         <Text style={[styles.dropdownOptionText, selected && styles.dropdownOptionTextActive]}>
+                          {selected ? '✓ ' : ''}
                           {languagePreferenceLabel(item, t)}
                         </Text>
                       </Pressable>
@@ -262,6 +277,7 @@ export function SettingsScreen({ navigation }: Props) {
           <AppCard style={styles.minimalCard}>
             <SectionHeader title={t('settings.geminiApiKey')} />
             <AppTextInput
+              accessibilityLabel={t('settings.geminiApiKey')}
               value={apiKey}
               onChangeText={setApiKey}
               secureTextEntry
@@ -315,6 +331,7 @@ export function SettingsScreen({ navigation }: Props) {
           <AppCard style={styles.minimalCard}>
             <FieldLabel>{t('settings.servings')}</FieldLabel>
             <AppTextInput
+              accessibilityLabel={t('settings.servings')}
               value={servings}
               onChangeText={setServings}
               keyboardType="number-pad"
@@ -323,6 +340,7 @@ export function SettingsScreen({ navigation }: Props) {
             />
             <FieldLabel>{t('settings.maxTimeMinutes')}</FieldLabel>
             <AppTextInput
+              accessibilityLabel={t('settings.maxTimeMinutes')}
               value={maxTimeMinutes}
               onChangeText={setMaxTimeMinutes}
               keyboardType="number-pad"
@@ -334,21 +352,18 @@ export function SettingsScreen({ navigation }: Props) {
               {(['any', '简单', '中等', '偏难'] as RecommendationDifficultyPreference[]).map((item) => {
                 const selected = preferredDifficulty === item;
                 return (
-                  <Pressable
-                    accessibilityRole="button"
+                  <IngredientChip
                     key={item}
+                    label={difficultyPreferenceLabel(item, t)}
                     onPress={() => setPreferredDifficulty(item)}
-                    style={[styles.choiceChip, selected && styles.choiceChipActive]}
-                  >
-                    <Text style={[styles.choiceChipText, selected && styles.choiceChipTextActive]}>
-                      {difficultyPreferenceLabel(item, t)}
-                    </Text>
-                  </Pressable>
+                    selected={selected}
+                  />
                 );
               })}
             </View>
             <FieldLabel>{t('settings.recentHistoryDays')}</FieldLabel>
             <AppTextInput
+              accessibilityLabel={t('settings.recentHistoryDays')}
               value={recentHistoryDays}
               onChangeText={setRecentHistoryDays}
               keyboardType="number-pad"
@@ -357,6 +372,7 @@ export function SettingsScreen({ navigation }: Props) {
             />
             <FieldLabel>{t('settings.dietaryPreferences')}</FieldLabel>
             <AppTextInput
+              accessibilityLabel={t('settings.dietaryPreferences')}
               value={dietaryPreferences}
               onChangeText={setDietaryPreferences}
               placeholder={t('settings.dietaryPreferencesPlaceholder')}
@@ -484,6 +500,10 @@ function createStyles(appColors: AppColorTokens) {
   dropdownButtonPressed: {
     opacity: 0.86,
   },
+  controlFocused: {
+    borderColor: appColors.accent,
+    borderWidth: 2,
+  },
   dropdownButtonText: {
     color: appColors.textPrimary,
     fontSize: 16,
@@ -567,29 +587,6 @@ function createStyles(appColors: AppColorTokens) {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  choiceChip: {
-    minHeight: 48,
-    minWidth: 48,
-    borderRadius: 10,
-    borderColor: appColors.border,
-    borderWidth: 1,
-    backgroundColor: appColors.surfaceMuted,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choiceChipActive: {
-    backgroundColor: appColors.primary,
-    borderColor: appColors.primary,
-  },
-  choiceChipText: {
-    color: appColors.textPrimary,
-    fontWeight: '600',
-    fontFamily: typography.strong,
-  },
-  choiceChipTextActive: {
-    color: appColors.onPrimary,
   },
   multilineInput: {
     height: 104,
