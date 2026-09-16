@@ -2,7 +2,7 @@
 
 Evidence for parent issue #3 (accessible Android UI foundation and Home flow), gathered for #20. The review asks the product owner to approve or reject the Phase 1 visual direction before Phase 2 begins.
 
-**Status: waiting for the product owner's decision. Three Phase 1 regressions are open (see [Remaining failures](#remaining-failures)).**
+**Status: waiting for the product owner's decision. The three Phase 1 regressions found during this review (R1–R3) are fixed in `3cd1881` (see [Fixes after review](#fixes-after-review)).**
 
 ## 1. Implementation under review
 
@@ -105,12 +105,25 @@ The checks follow [`docs/accessibility-phase1-checks.md`](../accessibility-phase
 
 | ID | Classification | Failure | Reproduction |
 | --- | --- | --- | --- |
-| R1 | Phase 1 regression | The English Recommendations tab label wraps mid-word (`Recommendatio` / `ns`) at the **default** font scale, and at 200% it spans three lines and overlaps the gesture bar. The 103 dp tab is too narrow for "Recommendations" at 12 sp bold. Label from `b65a3ab`; `numberOfLines={3}` from `69a9ca4`. | English, any appearance, any tab. See `en-light-fridge.png`, `en-light-home-font200.png`. |
-| R2 | Phase 1 regression | At 200% the Recommendations header title is cut off with an ellipsis (`Recipe Recommendatio…`) instead of wrapping. | English, font scale 2.0, open Recommendations. See `en-light-recommendations-font200.png`. |
-| R3 | Phase 1 regression | The Fridge header Settings button is 36 dp wide on screen. `minWidth: 48` with `marginRight: -12` in `FridgeScreen.tsx` (`headerSettingsButton`, from `b566b6c`) is clipped by the native header container. | Open Fridge and inspect the node bounds of `Settings`: `[943,73][1038,199]` px at 420 dpi. |
+| R1 | Phase 1 regression, **fixed in `3cd1881`** | The English Recommendations tab label wraps mid-word (`Recommendatio` / `ns`) at the **default** font scale, and at 200% it spans three lines and overlaps the gesture bar. The 103 dp tab is too narrow for "Recommendations" at 12 sp bold. Label from `b65a3ab`; `numberOfLines={3}` from `69a9ca4`. | English, any appearance, any tab. See `en-light-fridge.png`, `en-light-home-font200.png`. |
+| R2 | Phase 1 regression, **fixed in `3cd1881`** | At 200% the Recommendations header title is cut off with an ellipsis (`Recipe Recommendatio…`) instead of wrapping. | English, font scale 2.0, open Recommendations. See `en-light-recommendations-font200.png`. |
+| R3 | Phase 1 regression, **fixed in `3cd1881`** | The Fridge header Settings button is 36 dp wide on screen. `minWidth: 48` with `marginRight: -12` in `FridgeScreen.tsx` (`headerSettingsButton`, from `b566b6c`) is clipped by the native header container. | Open Fridge and inspect the node bounds of `Settings`: `[943,73][1038,199]` px at 420 dpi. |
 | P1 | Pre-existing issue | The quantity field on Add Ingredient exposes its placeholder `4` as its accessibility description, not the visible `Quantity` label. | Fridge → Add manually, then inspect the node tree. |
 | L1 | Out-of-scope limitation | No device screenshots of the loading, error, cached or populated Recommendations states. They need a live Gemini key, and completing Recommendation Ready is out of scope for #3 (ADR-0003: generating needs Gemini and BGE-M3). Rendered tests cover these states. | — |
 | L2 | Out-of-scope limitation | No full TalkBack gesture walk-through with speech. TalkBack on the emulator ignores injected `adb` swipes and keyboard shortcuts, so this needs a person on a physical device or emulator. It is a verification gap, not an observed failure; the product owner may require it before approval. | Enable TalkBack, then run `adb shell input swipe …`: focus does not move. |
+
+## Fixes after review
+
+Commit `3cd1881` fixes R1–R3. Sections 3–6 still describe the originally reviewed commit `ac8c176`.
+
+- **R1:** each tab label stays on one line and shrinks to fit instead of breaking a word. The tab bar grows less at large font sizes, so labels clear the gesture bar.
+- **R2 and R3:** the Fridge and Recommendations roots use a JS header in place of the native toolbar. The title is a heading that wraps instead of truncating, and header actions keep their full size.
+- **Rendered tests added:** "keeps every visible tab label on one line so no word breaks at large font sizes" and "shows full top-level destination titles as wrapping headings with their header actions".
+- **Automated results at `3cd1881`:** both type-checks pass; Node 61/61 pass; Jest 3 suites and 27/27 tests pass, with no failures or skips (88 tests total).
+- **Device check, same emulator:**
+  - The Fridge `Settings` button node is `[944,74][1070,200]` px (48×48 dp) and appears once.
+  - At 200%, the full `Recipe Recommendations` title shows and the tab labels end above the gesture bar.
+  - Screenshots: [light Fridge](screenshots/fix-en-light-fridge.png), [dark Fridge](screenshots/fix-en-dark-fridge.png), [Recommendations at 200%](screenshots/fix-en-light-recommendations-font200.png).
 
 ## 7. Privacy check
 
@@ -119,5 +132,5 @@ This package contains no Gemini credential (none was configured), no Personal Re
 ## 8. Decision
 
 - **Product owner approval of the Phase 1 visual direction:** Pending, not yet given.
-- **Phase 2 may proceed:** No, not until the product owner decides and R1–R3 are fixed or explicitly accepted.
+- **Phase 2 may proceed:** No, not until the product owner decides. R1–R3 are fixed, and P1, L1 and L2 remain for the product owner to accept or schedule.
 - Parent issue #3 stays open and unmodified until the product owner makes the acceptance decision.
