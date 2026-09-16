@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -21,12 +21,14 @@ import {
   inputHeights,
   radii,
   safeAreaSpacing,
-  semanticColors,
   semanticShadows,
   spacing,
   typeScale,
   typography,
+  type AppColorTokens,
+  useAppTheme,
 } from '../theme/theme';
+import { getActionAccessibilityState, getSelectableAccessibilityState } from './control-state';
 
 type FoundationAction = {
   label: string;
@@ -48,6 +50,7 @@ interface AppScaffoldProps {
 }
 
 export function AppScaffold({ children, header, footer, scroll = false, contentStyle, style, testID }: AppScaffoldProps) {
+  const styles = useFoundationStyles();
   const content = (
     <>
       {header}
@@ -78,11 +81,13 @@ interface TopLevelHeaderProps {
 }
 
 export function TopLevelHeader({ title, subtitle, leftAction, rightAction, compact = false }: TopLevelHeaderProps) {
+  const styles = useFoundationStyles();
+
   return (
     <View style={[styles.header, compact && styles.headerCompact]}>
       {leftAction ? <View style={styles.headerSide}>{leftAction}</View> : null}
       <View style={styles.headerCopy}>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <Text accessibilityRole="header" style={styles.headerTitle}>{title}</Text>
         {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
       {rightAction ? <View style={styles.headerSide}>{rightAction}</View> : null}
@@ -117,21 +122,27 @@ export function Button({
   textStyle,
   accessibilityLabel,
 }: ButtonProps) {
+  const { colors } = useAppTheme();
+  const styles = useFoundationStyles();
+  const [focused, setFocused] = useState(false);
   const inactive = disabled || loading;
-  const textColor = getButtonTextColor(variant, inactive);
+  const textColor = getButtonTextColor(colors, variant, inactive);
 
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: loading }}
+      accessibilityState={getActionAccessibilityState({ disabled, loading })}
       disabled={inactive}
+      onBlur={() => setFocused(false)}
+      onFocus={() => setFocused(true)}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         styles[`${variant}Button`],
         fullWidth && styles.fullWidth,
         inactive && styles.buttonDisabled,
+        focused && !inactive && styles.controlFocused,
         pressed && !inactive && styles.buttonPressed,
         style,
       ]}
@@ -152,6 +163,8 @@ interface ButtonGroupProps {
 }
 
 export function ButtonGroup({ children, direction = 'row', wrap = true, fullWidth = false, style }: ButtonGroupProps) {
+  const styles = useFoundationStyles();
+
   return (
     <View
       style={[
@@ -177,6 +190,8 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ title, description, primaryAction, secondaryAction, variant = 'compact', style }: EmptyStateProps) {
+  const styles = useFoundationStyles();
+
   return (
     <View style={[styles.stateCard, variant === 'fullScreen' && styles.fullScreenState, style]}>
       <Text style={styles.stateTitle}>{title}</Text>
@@ -223,6 +238,7 @@ export function SetupBlockerCard({
   compact = false,
   style,
 }: SetupBlockerCardProps) {
+  const styles = useFoundationStyles();
   const tone = getSetupBlockerTone(kind);
 
   return (
@@ -256,9 +272,16 @@ interface LoadingStateProps {
 }
 
 export function LoadingState({ title, description, variant = 'compact', style }: LoadingStateProps) {
+  const { colors } = useAppTheme();
+  const styles = useFoundationStyles();
+
   return (
-    <View style={[styles.stateCard, variant === 'fullScreen' && styles.fullScreenState, styles.loadingState, style]}>
-      <ActivityIndicator color={semanticColors.primary} />
+    <View
+      accessibilityLiveRegion="polite"
+      accessibilityState={{ busy: true }}
+      style={[styles.stateCard, variant === 'fullScreen' && styles.fullScreenState, styles.loadingState, style]}
+    >
+      <ActivityIndicator color={colors.primary} />
       {title ? <Text style={styles.stateTitle}>{title}</Text> : null}
       {description ? <Text style={styles.stateDescription}>{description}</Text> : null}
     </View>
@@ -277,6 +300,9 @@ interface FormFieldProps {
 }
 
 export function FormField({ label, description, error, required = false, requiredLabel = '*', children, inputProps, style }: FormFieldProps) {
+  const { colors } = useAppTheme();
+  const styles = useFoundationStyles();
+
   return (
     <View style={[styles.formField, style]}>
       <View style={styles.formLabelRow}>
@@ -284,29 +310,58 @@ export function FormField({ label, description, error, required = false, require
         {required ? <Text style={styles.requiredLabel}>{requiredLabel}</Text> : null}
       </View>
       {description ? <Text style={styles.formDescription}>{description}</Text> : null}
-      {children ?? <TextInput placeholderTextColor={semanticColors.textTertiary} style={[styles.input, inputProps?.multiline && styles.inputMultiline]} {...inputProps} />}
-      {error ? <Text style={styles.formError}>{error}</Text> : null}
+      {children ?? (
+        <TextInput
+          accessibilityState={{ disabled: inputProps?.editable === false }}
+          placeholderTextColor={colors.textTertiary}
+          style={[styles.input, inputProps?.multiline && styles.inputMultiline]}
+          {...inputProps}
+        />
+      )}
+      {error ? <Text accessibilityLiveRegion="polite" style={styles.formError}>{error}</Text> : null}
     </View>
   );
 }
 
-interface IngredientChipProps {
+interface IngredientChipBaseProps {
   label: string;
   quantity?: string;
   unit?: string;
   selected?: boolean;
   disabled?: boolean;
   onPress?: () => void;
-  onRemove?: () => void;
 }
 
-export function IngredientChip({ label, quantity, unit, selected = false, disabled = false, onPress, onRemove }: IngredientChipProps) {
+type IngredientChipProps = IngredientChipBaseProps & (
+  | { onRemove?: undefined; removeAccessibilityLabel?: never }
+  | { onRemove: () => void; removeAccessibilityLabel: string }
+);
+
+export function IngredientChip({
+  label,
+  quantity,
+  unit,
+  selected = false,
+  disabled = false,
+  onPress,
+  onRemove,
+  removeAccessibilityLabel,
+}: IngredientChipProps) {
+  const styles = useFoundationStyles();
+  const [focused, setFocused] = useState(false);
   const content = (
     <>
       <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
       {quantity ? <Text style={[styles.chipMeta, selected && styles.chipMetaSelected]}>{unit ? `${quantity} ${unit}` : quantity}</Text> : null}
       {onRemove ? (
-        <Pressable accessibilityLabel={`Remove ${label}`} accessibilityRole="button" disabled={disabled} onPress={onRemove} style={styles.chipRemove}>
+        <Pressable
+          accessibilityLabel={removeAccessibilityLabel}
+          accessibilityRole="button"
+          accessibilityState={getActionAccessibilityState({ disabled })}
+          disabled={disabled}
+          onPress={onRemove}
+          style={styles.chipRemove}
+        >
           <Text style={[styles.chipRemoveText, selected && styles.chipLabelSelected]}>x</Text>
         </Pressable>
       ) : null}
@@ -317,10 +372,19 @@ export function IngredientChip({ label, quantity, unit, selected = false, disabl
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ selected, disabled }}
+        accessibilityLabel={label}
+        accessibilityState={getSelectableAccessibilityState({ selected, disabled })}
         disabled={disabled}
+        onBlur={() => setFocused(false)}
+        onFocus={() => setFocused(true)}
         onPress={onPress}
-        style={({ pressed }) => [styles.chip, selected && styles.chipSelected, disabled && styles.chipDisabled, pressed && !disabled && styles.buttonPressed]}
+        style={({ pressed }) => [
+          styles.chip,
+          selected && styles.chipSelected,
+          disabled && styles.chipDisabled,
+          focused && !disabled && styles.controlFocused,
+          pressed && !disabled && styles.buttonPressed,
+        ]}
       >
         {content}
       </Pressable>
@@ -330,22 +394,46 @@ export function IngredientChip({ label, quantity, unit, selected = false, disabl
   return <View style={[styles.chip, selected && styles.chipSelected, disabled && styles.chipDisabled]}>{content}</View>;
 }
 
-interface PreferenceChipProps {
+interface PreferenceChipBaseProps {
   label: string;
   selected?: boolean;
   disabled?: boolean;
   onPress?: () => void;
-  onRemove?: () => void;
 }
 
-export function PreferenceChip({ label, selected = false, disabled = false, onPress, onRemove }: PreferenceChipProps) {
+type PreferenceChipProps = PreferenceChipBaseProps & (
+  | { onRemove?: undefined; removeAccessibilityLabel?: never }
+  | { onRemove: () => void; removeAccessibilityLabel: string }
+);
+
+export function PreferenceChip({
+  label,
+  selected = false,
+  disabled = false,
+  onPress,
+  onRemove,
+  removeAccessibilityLabel,
+}: PreferenceChipProps) {
+  const sharedProps = {
+    label,
+    selected,
+    disabled,
+    onPress,
+  };
+
+  if (onRemove) {
+    return (
+      <IngredientChip
+        {...sharedProps}
+        onRemove={onRemove}
+        removeAccessibilityLabel={removeAccessibilityLabel}
+      />
+    );
+  }
+
   return (
     <IngredientChip
-      label={label}
-      selected={selected}
-      disabled={disabled}
-      onPress={onPress}
-      onRemove={onRemove}
+      {...sharedProps}
     />
   );
 }
@@ -359,27 +447,29 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ label, tone = 'neutral', style }: StatusBadgeProps) {
+  const styles = useFoundationStyles();
+
   return (
-    <View style={[styles.statusBadge, styles[`${tone}Badge`], style]}>
-      <Text style={[styles.statusBadgeText, getStatusBadgeTextStyle(tone)]}>{label}</Text>
+    <View accessible accessibilityLabel={label} style={[styles.statusBadge, styles[`${tone}Badge`], style]}>
+      <Text style={[styles.statusBadgeText, getStatusBadgeTextStyle(styles, tone)]}>{label}</Text>
     </View>
   );
 }
 
-function getButtonTextColor(variant: ButtonVariant, disabled: boolean) {
+function getButtonTextColor(colors: AppColorTokens, variant: ButtonVariant, disabled: boolean) {
   if (disabled) {
-    return semanticColors.textTertiary;
+    return colors.textTertiary;
   }
 
   if (variant === 'primary' || variant === 'destructive') {
-    return semanticColors.textInverse;
+    return variant === 'primary' ? colors.onPrimary : colors.textInverse;
   }
 
   if (variant === 'secondary') {
-    return semanticColors.primary;
+    return colors.primary;
   }
 
-  return semanticColors.textPrimary;
+  return colors.textPrimary;
 }
 
 function getSetupBlockerTone(kind: SetupBlockerKind): StatusBadgeTone {
@@ -394,7 +484,7 @@ function getSetupBlockerTone(kind: SetupBlockerKind): StatusBadgeTone {
   return 'danger';
 }
 
-function getStatusBadgeTextStyle(tone: StatusBadgeTone) {
+function getStatusBadgeTextStyle(styles: ReturnType<typeof createFoundationStyles>, tone: StatusBadgeTone) {
   if (tone === 'success' || tone === 'danger') {
     return styles.statusBadgeTextInverse;
   }
@@ -410,10 +500,16 @@ function getStatusBadgeTextStyle(tone: StatusBadgeTone) {
   return styles.statusBadgeTextNeutral;
 }
 
-const styles = StyleSheet.create({
+function useFoundationStyles() {
+  const { colors } = useAppTheme();
+  return useMemo(() => createFoundationStyles(colors), [colors]);
+}
+
+function createFoundationStyles(colors: AppColorTokens) {
+  return StyleSheet.create({
   scaffold: {
     flex: 1,
-    backgroundColor: semanticColors.canvas,
+    backgroundColor: colors.canvas,
     paddingHorizontal: safeAreaSpacing.horizontal,
     paddingTop: safeAreaSpacing.top,
     paddingBottom: safeAreaSpacing.bottom,
@@ -452,11 +548,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...typeScale.screenTitle,
-    color: semanticColors.textPrimary,
+    color: colors.textPrimary,
   },
   headerSubtitle: {
     ...typeScale.body,
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   button: {
     minHeight: buttonHeights.md,
@@ -470,28 +566,32 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   primaryButton: {
-    backgroundColor: semanticColors.primary,
-    borderColor: semanticColors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   secondaryButton: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.borderStrong,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
   },
   tertiaryButton: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
   },
   destructiveButton: {
-    backgroundColor: semanticColors.danger,
-    borderColor: semanticColors.danger,
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   buttonDisabled: {
-    backgroundColor: semanticColors.surfaceDisabled,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surfaceDisabled,
+    borderColor: colors.border,
   },
   buttonPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.985 }],
+  },
+  controlFocused: {
+    borderColor: colors.accent,
+    borderWidth: borders.focus,
   },
   buttonText: {
     ...typeScale.label,
@@ -515,8 +615,8 @@ const styles = StyleSheet.create({
   stateCard: {
     borderRadius: radii.lg,
     borderWidth: borders.regular,
-    borderColor: semanticColors.border,
-    backgroundColor: semanticColors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: spacing.xl,
     gap: spacing.md,
     ...semanticShadows.soft,
@@ -529,11 +629,11 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     ...typeScale.cardTitle,
-    color: semanticColors.textPrimary,
+    color: colors.textPrimary,
   },
   stateDescription: {
     ...typeScale.body,
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   setupCard: {
     borderRadius: radii.lg,
@@ -546,24 +646,24 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   dangerSetupCard: {
-    backgroundColor: semanticColors.dangerMuted,
-    borderColor: '#E8B3AA',
+    backgroundColor: colors.dangerMuted,
+    borderColor: colors.danger,
   },
   warningSetupCard: {
-    backgroundColor: semanticColors.secondaryMuted,
-    borderColor: '#E1C094',
+    backgroundColor: colors.accentMuted,
+    borderColor: colors.warning,
   },
   infoSetupCard: {
-    backgroundColor: semanticColors.infoMuted,
-    borderColor: '#B9D2DA',
+    backgroundColor: colors.infoMuted,
+    borderColor: colors.info,
   },
   successSetupCard: {
-    backgroundColor: semanticColors.primaryMuted,
-    borderColor: '#B9D8BF',
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.success,
   },
   neutralSetupCard: {
-    backgroundColor: semanticColors.surfaceMuted,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
   },
   loadingState: {
     alignItems: 'center',
@@ -579,27 +679,27 @@ const styles = StyleSheet.create({
   },
   formLabel: {
     ...typeScale.label,
-    color: semanticColors.textPrimary,
+    color: colors.textPrimary,
   },
   requiredLabel: {
     ...typeScale.caption,
-    color: semanticColors.danger,
+    color: colors.danger,
   },
   formDescription: {
     ...typeScale.caption,
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   formError: {
     ...typeScale.caption,
-    color: semanticColors.danger,
+    color: colors.danger,
   },
   input: {
     minHeight: inputHeights.md,
     borderRadius: radii.md,
     borderWidth: borders.regular,
-    borderColor: semanticColors.border,
-    backgroundColor: semanticColors.surface,
-    color: semanticColors.textPrimary,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontFamily: typography.body,
@@ -610,11 +710,11 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   chip: {
-    minHeight: 36,
+    minHeight: buttonHeights.md,
     borderRadius: radii.pill,
     borderWidth: borders.regular,
-    borderColor: semanticColors.border,
-    backgroundColor: semanticColors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     flexDirection: 'row',
@@ -622,35 +722,35 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   chipSelected: {
-    backgroundColor: semanticColors.primary,
-    borderColor: semanticColors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipDisabled: {
     opacity: 0.46,
   },
   chipLabel: {
     ...typeScale.label,
-    color: semanticColors.textPrimary,
+    color: colors.textPrimary,
   },
   chipLabelSelected: {
-    color: semanticColors.textInverse,
+    color: colors.onPrimary,
   },
   chipMeta: {
     ...typeScale.caption,
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   chipMetaSelected: {
-    color: semanticColors.textInverse,
+    color: colors.onPrimary,
   },
   chipRemove: {
-    minWidth: 24,
-    minHeight: 24,
+    minWidth: buttonHeights.md,
+    minHeight: buttonHeights.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipRemoveText: {
     ...typeScale.label,
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   statusBadge: {
     alignSelf: 'flex-start',
@@ -661,34 +761,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   neutralBadge: {
-    backgroundColor: semanticColors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
   },
   successBadge: {
-    backgroundColor: semanticColors.primary,
+    backgroundColor: colors.success,
   },
   warningBadge: {
-    backgroundColor: semanticColors.secondaryMuted,
+    backgroundColor: colors.accentMuted,
   },
   dangerBadge: {
-    backgroundColor: semanticColors.danger,
+    backgroundColor: colors.danger,
   },
   infoBadge: {
-    backgroundColor: semanticColors.infoMuted,
+    backgroundColor: colors.infoMuted,
   },
   statusBadgeText: {
     ...typeScale.caption,
     fontFamily: typography.strong,
   },
   statusBadgeTextNeutral: {
-    color: semanticColors.textSecondary,
+    color: colors.textSecondary,
   },
   statusBadgeTextInverse: {
-    color: semanticColors.textInverse,
+    color: colors.textInverse,
   },
   statusBadgeTextWarning: {
-    color: semanticColors.warning,
+    color: colors.warning,
   },
   statusBadgeTextInfo: {
-    color: semanticColors.info,
+    color: colors.info,
   },
-});
+  });
+}

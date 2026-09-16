@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { AppFeedbackProvider } from '../shared/components';
+import { AppFeedbackProvider, Button } from '../shared/components';
 import { initializeDatabase } from '../db/database';
 import {
   createDatabaseStartupDiagnostic,
@@ -67,7 +67,7 @@ export default function App() {
 
 function AppContent() {
   const { t } = useI18n();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, statusBarStyle } = useAppTheme();
   const [startupState, setStartupState] = useState<StartupState>({ status: 'loading' });
   const navigationTheme = useMemo(
     () => ({
@@ -112,11 +112,12 @@ function AppContent() {
 
     return (
       <SafeAreaProvider>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <StatusBar style={statusBarStyle} />
         <SafeAreaView style={[startupStyles.safeArea, { backgroundColor: colors.canvas }]}>
           <ScrollView contentContainerStyle={startupStyles.recoveryScroll}>
             <View
               accessibilityLiveRegion="polite"
+              accessibilityRole="alert"
               style={[
                 startupStyles.recoveryCard,
                 { backgroundColor: colors.surface, borderColor: colors.border },
@@ -126,19 +127,7 @@ function AppContent() {
               <Text style={[startupStyles.recoveryText, { color: colors.textPrimary }]}>
                 {t('app.databaseRecoveryText')}
               </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void prepareDatabase()}
-                style={({ pressed }) => [
-                  startupStyles.retryButton,
-                  { backgroundColor: colors.primary },
-                  pressed && startupStyles.retryButtonPressed,
-                ]}
-              >
-                <Text style={[startupStyles.retryButtonText, { color: colors.onPrimary }]}>
-                  {t('common.retry')}
-                </Text>
-              </Pressable>
+              <Button fullWidth title={t('common.retry')} onPress={() => void prepareDatabase()} />
               <View
                 style={[
                   startupStyles.diagnosticCard,
@@ -162,8 +151,12 @@ function AppContent() {
   if (startupState.status === 'loading') {
     return (
       <SafeAreaProvider>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <View style={[startupStyles.loading, { backgroundColor: colors.canvas }]}>
+        <StatusBar style={statusBarStyle} />
+        <View
+          accessibilityLiveRegion="polite"
+          accessibilityState={{ busy: true }}
+          style={[startupStyles.loading, { backgroundColor: colors.canvas }]}
+        >
           <ActivityIndicator color={colors.primary} size="large" />
           <Text selectable style={[startupStyles.loadingText, { color: colors.textSecondary }]}>
             {t('app.loadingDatabase')}
@@ -176,7 +169,7 @@ function AppContent() {
   return (
     <SafeAreaProvider>
       <NavigationContainer theme={navigationTheme}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <StatusBar style={statusBarStyle} />
         <RootStack.Navigator screenOptions={createStackScreenOptions(colors)}>
           <RootStack.Screen name="MainTabs" component={MainTabsNavigator} options={{ headerShown: false }} />
           <RootStack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
@@ -356,23 +349,6 @@ const startupStyles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
-  },
-  retryButton: {
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
-  retryButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }],
-  },
-  retryButtonText: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '800',
   },
   diagnosticCard: {
     gap: spacing.sm,

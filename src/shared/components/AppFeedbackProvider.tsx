@@ -24,7 +24,18 @@ export function AppFeedbackProvider({ children }: PropsWithChildren) {
   return (
     <FeedbackContext.Provider value={value}>
       {children}
-      <AppFeedbackModal feedback={feedback} closeLabel={t('common.ok')} onClose={() => setFeedback(null)} />
+      <AppFeedbackModal
+        feedback={feedback}
+        closeLabel={t('common.ok')}
+        toneLabel={
+          feedback?.tone === 'error'
+            ? t('common.statusError')
+            : feedback?.tone === 'info'
+              ? t('common.statusInfo')
+              : t('common.statusSuccess')
+        }
+        onClose={() => setFeedback(null)}
+      />
     </FeedbackContext.Provider>
   );
 }

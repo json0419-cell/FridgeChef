@@ -159,6 +159,7 @@ export function DataManagementScreen() {
         }
         cancelLabel={t('common.cancel')}
         confirmLabel={t('dataManagement.confirmAction')}
+        toneLabel={t('common.confirmation')}
         tone="danger"
         onCancel={() => setPendingItem(null)}
         onConfirm={() => void confirmCleanup()}

@@ -387,6 +387,7 @@ export function SettingsScreen({ navigation }: Props) {
         message={confirmDialog?.message ?? ''}
         cancelLabel={t('common.cancel')}
         confirmLabel={confirmDialog?.confirmLabel ?? ''}
+        toneLabel={confirmDialog?.tone === 'danger' ? t('common.confirmation') : t('common.notice')}
         tone={confirmDialog?.tone}
         onCancel={() => setConfirmDialog(null)}
         onConfirm={() => confirmDialog?.onConfirm()}

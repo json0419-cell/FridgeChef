@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from './PrimaryButton';
-import { colors, radii, shadows, spacing, typography } from '../theme/theme';
+import { radii, semanticShadows, spacing, typography, type AppColorTokens, useAppTheme } from '../theme/theme';
 
 interface AppConfirmModalProps {
   visible: boolean;
@@ -8,6 +9,7 @@ interface AppConfirmModalProps {
   message: string;
   cancelLabel: string;
   confirmLabel: string;
+  toneLabel: string;
   tone?: 'danger' | 'info';
   onCancel: () => void;
   onConfirm: () => void;
@@ -19,17 +21,21 @@ export function AppConfirmModal({
   message,
   cancelLabel,
   confirmLabel,
+  toneLabel,
   tone = 'info',
   onCancel,
   onConfirm,
 }: AppConfirmModalProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
-      <Pressable accessibilityRole="button" style={styles.overlay} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
+      <Pressable accessible={false} style={styles.overlay} onPress={onCancel}>
+        <Pressable accessibilityViewIsModal style={styles.card} onPress={(event) => event.stopPropagation()}>
           <View style={styles.header}>
             <Text style={[styles.badge, tone === 'danger' ? styles.badgeDanger : styles.badgeInfo]}>
-              {tone === 'danger' ? 'CONFIRM' : 'NOTICE'}
+              {toneLabel}
             </Text>
           </View>
           <Text style={styles.title}>{title}</Text>
@@ -49,10 +55,11 @@ export function AppConfirmModal({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColorTokens) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(18, 13, 9, 0.48)',
+    backgroundColor: colors.overlay,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -66,7 +73,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.xl,
     gap: spacing.md,
-    ...shadows.lift,
+    ...semanticShadows.card,
   },
   header: {
     flexDirection: 'row',
@@ -85,22 +92,22 @@ const styles = StyleSheet.create({
     fontFamily: typography.strong,
   },
   badgeInfo: {
-    color: colors.ink,
-    backgroundColor: colors.gold,
+    color: colors.textPrimary,
+    backgroundColor: colors.infoMuted,
   },
   badgeDanger: {
     color: colors.textInverse,
     backgroundColor: colors.danger,
   },
   title: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 26,
     lineHeight: 31,
     fontWeight: '900',
     fontFamily: typography.display,
   },
   message: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '700',
@@ -114,4 +121,5 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
   },
-});
+  });
+}

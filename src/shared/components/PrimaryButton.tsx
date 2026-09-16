@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, gradients, radii, spacing, typography } from '../theme/theme';
+import { radii, semanticShadows, spacing, typography, type AppColorTokens, useAppTheme } from '../theme/theme';
+import { getActionAccessibilityState } from './control-state';
 
 interface PrimaryButtonProps {
   title: string;
@@ -11,6 +12,7 @@ interface PrimaryButtonProps {
   variant?: 'primary' | 'secondary' | 'danger';
   style?: StyleProp<ViewStyle>;
   icon?: ReactNode;
+  accessibilityLabel?: string;
 }
 
 export function PrimaryButton({
@@ -21,30 +23,40 @@ export function PrimaryButton({
   variant = 'primary',
   style,
   icon,
+  accessibilityLabel,
 }: PrimaryButtonProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [focused, setFocused] = useState(false);
+  const inactive = disabled || loading;
   const content = (
     <>
-      {loading ? <ActivityIndicator color={variant === 'secondary' ? colors.primary : colors.textInverse} /> : icon}
+      {loading ? <ActivityIndicator color={variant === 'secondary' ? colors.primary : variant === 'primary' ? colors.onPrimary : colors.textInverse} /> : icon}
       <Text style={[styles.text, variant === 'secondary' && styles.secondaryText]}>{title}</Text>
     </>
   );
 
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel ?? title}
       accessibilityRole="button"
-      disabled={disabled || loading}
+      accessibilityState={getActionAccessibilityState({ disabled, loading })}
+      disabled={inactive}
+      onBlur={() => setFocused(false)}
+      onFocus={() => setFocused(true)}
       onPress={onPress}
       style={({ pressed }) => [
         styles.shell,
         styles[variant],
         (pressed || loading) && styles.pressed,
-        (disabled || loading) && styles.disabled,
+        inactive && styles.disabled,
+        focused && !inactive && styles.focused,
         style,
       ]}
     >
       {variant === 'primary' || variant === 'danger' ? (
         <LinearGradient
-          colors={variant === 'danger' ? gradients.danger : gradients.primary}
+          colors={variant === 'danger' ? [colors.danger, colors.danger] : [colors.primaryPressed, colors.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.button}
@@ -58,21 +70,18 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColorTokens) {
+  return StyleSheet.create({
   shell: {
     borderRadius: radii.pill,
     overflow: 'hidden',
   },
   primary: {
     backgroundColor: colors.primary,
-    elevation: 3,
-    shadowColor: '#17472F',
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 7 },
+    ...semanticShadows.card,
   },
   secondary: {
-    backgroundColor: 'rgba(255, 253, 248, 0.9)',
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
   },
@@ -97,8 +106,12 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.46,
   },
+  focused: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+  },
   text: {
-    color: colors.textInverse,
+    color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
@@ -107,4 +120,5 @@ const styles = StyleSheet.create({
   secondaryText: {
     color: colors.primary,
   },
-});
+  });
+}

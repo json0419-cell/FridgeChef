@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, shadows, spacing, typography } from '../theme/theme';
+import { radii, semanticShadows, spacing, typography, type AppColorTokens, useAppTheme } from '../theme/theme';
+import { Button } from './Foundation';
 
 export type FeedbackState = {
   tone: 'success' | 'error' | 'info';
@@ -10,34 +12,43 @@ export type FeedbackState = {
 interface AppFeedbackModalProps {
   feedback: FeedbackState | null;
   closeLabel: string;
+  toneLabel: string;
   onClose: () => void;
 }
 
-export function AppFeedbackModal({ feedback, closeLabel, onClose }: AppFeedbackModalProps) {
+export function AppFeedbackModal({ feedback, closeLabel, toneLabel, onClose }: AppFeedbackModalProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Modal transparent visible={Boolean(feedback)} animationType="fade" onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
+      <Pressable accessible={false} style={styles.overlay} onPress={onClose}>
+        <Pressable
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          accessibilityViewIsModal
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.header}>
             <Text style={[styles.badge, feedback?.tone === 'error' ? styles.badgeError : feedback?.tone === 'info' ? styles.badgeInfo : styles.badgeSuccess]}>
-              {feedback?.tone === 'error' ? 'ERROR' : feedback?.tone === 'info' ? 'INFO' : 'SUCCESS'}
+              {toneLabel}
             </Text>
           </View>
           <Text style={styles.title}>{feedback?.title}</Text>
           {feedback?.message ? <Text style={styles.message}>{feedback.message}</Text> : null}
-          <Pressable accessibilityRole="button" style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>{closeLabel}</Text>
-          </Pressable>
+          <Button fullWidth title={closeLabel} onPress={onClose} />
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColorTokens) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(18, 13, 9, 0.48)',
+    backgroundColor: colors.overlay,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -51,7 +62,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.xl,
     gap: spacing.md,
-    ...shadows.lift,
+    ...semanticShadows.card,
   },
   header: {
     flexDirection: 'row',
@@ -74,39 +85,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   badgeInfo: {
-    color: colors.ink,
-    backgroundColor: colors.gold,
+    color: colors.textPrimary,
+    backgroundColor: colors.infoMuted,
   },
   badgeError: {
     color: colors.textInverse,
     backgroundColor: colors.danger,
   },
   title: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 26,
     lineHeight: 31,
     fontWeight: '900',
     fontFamily: typography.display,
   },
   message: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '700',
     fontFamily: typography.body,
   },
-  button: {
-    minHeight: 50,
-    borderRadius: radii.pill,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-  },
-  buttonText: {
-    color: colors.textInverse,
-    fontSize: 15,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-});
+  });
+}

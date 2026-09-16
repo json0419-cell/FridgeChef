@@ -1,13 +1,16 @@
-import type { PropsWithChildren } from 'react';
+import { useMemo, type PropsWithChildren } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, gradients } from '../theme/theme';
+import { type AppColorTokens, useAppTheme } from '../theme/theme';
 
 export function Screen({ children }: PropsWithChildren) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={gradients.app} style={styles.backgroundFill} />
+      <LinearGradient colors={[colors.canvas, colors.canvasSubtle, colors.canvas]} style={styles.backgroundFill} />
       <View pointerEvents="none" style={styles.topWash} />
       <View pointerEvents="none" style={styles.leftBand} />
       <View pointerEvents="none" style={[styles.orb, styles.orbTop]} />
@@ -17,10 +20,11 @@ export function Screen({ children }: PropsWithChildren) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColorTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
   },
   backgroundFill: {
     position: 'absolute',
@@ -37,7 +41,7 @@ const styles = StyleSheet.create({
     height: 220,
     borderBottomLeftRadius: 90,
     borderBottomRightRadius: 90,
-    backgroundColor: 'rgba(255, 253, 248, 0.42)',
+    backgroundColor: colors.surfaceRaised,
   },
   leftBand: {
     position: 'absolute',
@@ -46,7 +50,7 @@ const styles = StyleSheet.create({
     width: 210,
     height: '76%',
     borderRadius: 120,
-    backgroundColor: 'rgba(232, 75, 47, 0.06)',
+    backgroundColor: colors.primaryMuted,
     transform: [{ rotate: '-8deg' }],
   },
   orb: {
@@ -59,11 +63,12 @@ const styles = StyleSheet.create({
   orbTop: {
     top: -104,
     right: -96,
-    backgroundColor: colors.gold,
+    backgroundColor: colors.accentMuted,
   },
   orbBottom: {
     left: -116,
     bottom: -116,
-    backgroundColor: colors.sky,
+    backgroundColor: colors.infoMuted,
   },
-});
+  });
+}
