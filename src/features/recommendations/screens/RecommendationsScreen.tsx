@@ -7,6 +7,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, Circle } from 'lucide-react-na
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
+import { getActionAccessibilityState } from '../../../shared/components/control-state';
 import {
   RecommendationRefinerError,
   refineRagRecommendationsWithProvider,
@@ -123,6 +124,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [requestTags, setRequestTags] = useState(() => (language === 'en' ? REQUEST_TAGS_EN : REQUEST_TAGS_ZH));
   const [newRequestTag, setNewRequestTag] = useState('');
   const [highlightedRecommendationId, setHighlightedRecommendationId] = useState<string | null>(null);
+  const [fixedRequestBarHeight, setFixedRequestBarHeight] = useState<number | null>(null);
   const [expandedRequestSections, setExpandedRequestSections] = useState<Record<RequestTagCategoryKey, boolean>>({
     cuisine: false,
     meal: false,
@@ -493,7 +495,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           return next;
         });
         if (!silent) {
-          setRefineMessage(t('recommendations.loadedMore', { count: refinedToAppend.length }));
+          setRefineMessage(refinedToAppend.length === 1 ? t('recommendations.loadedMoreOne', { count: 1 }) : t('recommendations.loadedMore', { count: refinedToAppend.length }));
         }
       } catch (error) {
         console.warn('Gemini recommendation load-more failed');
@@ -690,7 +692,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       ].filter((message): message is string => Boolean(message))
     : [];
   const selectedRequestTags = parseRecommendationRequestTags(recommendationRequest);
-  const requestTagCategories = buildRequestTagCategories(requestTags, language);
+  const requestTagCategories = buildRequestTagCategories(requestTags, language, t);
   const fixedActionPaddingBottom = Math.max(insets.bottom, 12);
 
   useEffect(() => {
@@ -718,7 +720,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   if (loading && !hasLoadedOnce) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
-        <View style={styles.loadingScreen}>
+        <View accessible accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} style={styles.loadingScreen}>
           <ActivityIndicator color={appColors.primary} size="large" />
           <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
           <Text style={styles.emptyText}>{t('recommendations.loadingText')}</Text>
@@ -736,7 +738,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         onScrollToIndexFailed={({ averageItemLength, index }) => {
           listRef.current?.scrollToOffset({ animated: true, offset: Math.max(averageItemLength * index, 0) });
         }}
-        contentContainerStyle={[styles.content, { paddingBottom: 112 + fixedActionPaddingBottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: fixedRequestBarHeight === null ? 112 + fixedActionPaddingBottom : fixedRequestBarHeight + spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
@@ -751,21 +753,27 @@ export function RecommendationsScreen({ navigation, route }: Props) {
             />
             <View style={styles.modeRow}>
               <RequestTagPill
-                label={isFridgeEmpty ? t('recommendations.inspirationMode') : t('recommendations.ingredientsCount', { count: ingredientCount })}
+                label={isFridgeEmpty ? t('recommendations.inspirationMode') : ingredientCount === 1 ? t('recommendations.ingredientsCountOne', { count: 1 }) : t('recommendations.ingredientsCount', { count: ingredientCount })}
               />
             </View>
             <AppCard style={styles.minimalCard}>
               <View style={styles.requestHeader}>
-                <Text style={styles.requestTitle}>{t('recommendations.requestTitle')}</Text>
-                <Text numberOfLines={1} style={styles.requestHelperText}>
-                  {requestHelperShort(language)}
+                <Text accessibilityRole="header" style={styles.requestTitle}>{t('recommendations.requestTitle')}</Text>
+                <Text style={styles.requestHelperText}>
+                  {t('recommendations.requestHelperShort')}
                 </Text>
               </View>
               {selectedRequestTags.length > 0 ? (
                 <View style={styles.selectedRequestArea}>
                   <View style={styles.selectedRequestHeader}>
                     <Text style={styles.selectedRequestLabel}>{t('recommendations.currentRequest')}</Text>
-                    <Pressable accessibilityRole="button" onPress={clearRecommendationRequest} disabled={loading || loadingMore} style={styles.clearRequestLink}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={getActionAccessibilityState({ disabled: loading || loadingMore })}
+                      disabled={loading || loadingMore}
+                      onPress={clearRecommendationRequest}
+                      style={styles.clearRequestLink}
+                    >
                       <Text style={styles.clearRequestText}>{t('recommendations.requestClear')}</Text>
                     </Pressable>
                   </View>
@@ -877,15 +885,15 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         ListEmptyComponent={
           <AppCard style={[styles.minimalCard, styles.empty]}>
             {loading ? (
-              <>
+              <View accessible accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} style={styles.loadingStatus}>
                 <ActivityIndicator color={appColors.primary} />
                 <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
                 <Text style={styles.emptyText}>{t('recommendations.loadingText')}</Text>
-              </>
+              </View>
             ) : (
               <>
-                <Text style={styles.emptyTitle}>{t('recommendations.emptyTitle')}</Text>
-                <Text style={styles.emptyText}>{refineMessage || t('recommendations.emptyText')}</Text>
+                <Text accessibilityRole="header" style={styles.emptyTitle}>{t('recommendations.emptyTitle')}</Text>
+                <Text accessibilityLiveRegion="polite" style={styles.emptyText}>{refineMessage || t('recommendations.emptyText')}</Text>
               </>
             )}
           </AppCard>
@@ -913,7 +921,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           >
             <View style={styles.cardHeader}>
               <View style={styles.recipeTitleBlock}>
-                <Text style={styles.recipeTitle}>{item.recommendation.title}</Text>
+                <Text accessibilityRole="header" style={styles.recipeTitle}>{item.recommendation.title}</Text>
                 <Text style={styles.sourceLine}>{getRagSourceLabel(item.recommendation.source, t)}</Text>
               </View>
             </View>
@@ -922,8 +930,8 @@ export function RecommendationsScreen({ navigation, route }: Props) {
               <Text style={styles.reason}>{item.recommendation.scoreReason}</Text>
             </View>
             <View style={styles.metaRow}>
-              <Text style={styles.metaPill}>{t('recommendations.difficulty')}：{difficultyLabel(item.recommendation.difficulty, t)}</Text>
-              <Text style={styles.metaPill}>{t('recommendations.time')}：{formatMinutes(item.recommendation.estimatedTimeMinutes, t)}</Text>
+              <Text style={styles.metaPill}>{t('recommendations.difficultyValue', { value: difficultyLabel(item.recommendation.difficulty, t) })}</Text>
+              <Text style={styles.metaPill}>{t('recommendations.timeValue', { value: formatMinutes(item.recommendation.estimatedTimeMinutes, t) })}</Text>
               {item.recommendation.servingNote ? <Text style={styles.metaPill}>{item.recommendation.servingNote}</Text> : null}
             </View>
             <View style={styles.ingredientGrid}>
@@ -952,12 +960,14 @@ export function RecommendationsScreen({ navigation, route }: Props) {
             {item.recommendation.notes ? <Text style={styles.notes}>{t('recommendations.notes', { notes: item.recommendation.notes })}</Text> : null}
             <View style={styles.cardFooter}>
               <ActionButton
+                accessibilityLabel={t('recommendations.markCookedFor', { title: item.recommendation.title })}
                 title={t('recommendations.markCooked')}
                 variant="secondary"
                 onPress={() => markCooked(item.recommendation.recipeId ?? item.recommendation.id, item.recommendation.title)}
                 style={styles.cardFooterButton}
               />
               <Pressable
+                accessibilityLabel={t('recommendations.replaceThisFor', { title: item.recommendation.title })}
                 accessibilityRole="button"
                 style={styles.dismissButton}
                 onPress={() => dismissRecommendation(item.recommendation)}
@@ -968,7 +978,10 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           </AppCard>
         )}
       />
-      <View style={[styles.fixedRequestBar, { paddingBottom: fixedActionPaddingBottom }]}>
+      <View
+        onLayout={(event) => setFixedRequestBarHeight(Math.ceil(event.nativeEvent.layout.height))}
+        style={[styles.fixedRequestBar, { paddingBottom: fixedActionPaddingBottom }]}
+      >
         <ActionButton
           title={t('recommendations.applyRequest')}
           onPress={applyRecommendationRequest}
@@ -1011,7 +1024,7 @@ function ReadinessChecklist({
     <AppCard style={[styles.minimalCard, styles.readinessCard]}>
       <View style={styles.readinessHeader}>
         <View style={styles.readinessTitleBlock}>
-          <Text style={styles.readinessTitle}>{t('recommendations.readinessTitle')}</Text>
+          <Text accessibilityRole="header" style={styles.readinessTitle}>{t('recommendations.readinessTitle')}</Text>
           <Text style={styles.readinessDetail}>
             {readiness.ready
               ? t('recommendations.readinessComplete')
@@ -1021,30 +1034,44 @@ function ReadinessChecklist({
         {loading ? <ActivityIndicator color={appColors.primary} size="small" /> : null}
       </View>
       <View style={styles.readinessList}>
-        {items.map((item) => (
-          <Pressable
-            accessibilityLabel={`${item.label}. ${item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired')}`}
-            accessibilityRole={item.ready ? 'text' : 'button'}
-            disabled={loading || item.ready}
-            key={item.key}
-            onPress={item.onPress}
-            style={({ pressed }) => [
-              styles.readinessRow,
-              pressed && !item.ready && styles.readinessRowPressed,
-            ]}
-          >
-            {item.ready ? (
-              <CheckCircle2 color={appColors.primary} size={21} strokeWidth={2.2} />
-            ) : (
-              <Circle color={appColors.textTertiary} size={21} strokeWidth={2} />
-            )}
-            <Text style={[styles.readinessLabel, item.ready && styles.readinessLabelReady]}>{item.label}</Text>
-            <Text style={styles.readinessStatus}>
-              {item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired')}
-            </Text>
-            {!item.ready ? <ChevronRight color={appColors.textTertiary} size={19} strokeWidth={2} /> : null}
-          </Pressable>
-        ))}
+        {items.map((item) => {
+          const status = item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired');
+          const label = `${item.label}. ${status}`;
+          const content = (
+            <>
+              {item.ready ? (
+                <CheckCircle2 color={appColors.primary} size={21} strokeWidth={2.2} />
+              ) : (
+                <Circle color={appColors.textTertiary} size={21} strokeWidth={2} />
+              )}
+              <Text style={[styles.readinessLabel, item.ready && styles.readinessLabelReady]}>{item.label}</Text>
+              <Text style={styles.readinessStatus}>{status}</Text>
+              {!item.ready ? <ChevronRight color={appColors.textTertiary} size={19} strokeWidth={2} /> : null}
+            </>
+          );
+
+          if (item.ready) {
+            return (
+              <View accessible accessibilityLabel={label} key={item.key} style={styles.readinessRow}>
+                {content}
+              </View>
+            );
+          }
+
+          return (
+            <Pressable
+              accessibilityLabel={label}
+              accessibilityRole="button"
+              accessibilityState={getActionAccessibilityState({ loading })}
+              disabled={loading}
+              key={item.key}
+              onPress={item.onPress}
+              style={({ pressed }) => [styles.readinessRow, pressed && styles.readinessRowPressed]}
+            >
+              {content}
+            </Pressable>
+          );
+        })}
       </View>
     </AppCard>
   );
@@ -1103,7 +1130,13 @@ function RequestTagAccordion({
 
   return (
     <View style={styles.requestAccordionSection}>
-      <Pressable accessibilityRole="button" onPress={onToggleSection} style={styles.requestAccordionHeader}>
+      <Pressable
+        accessibilityLabel={selectedCount > 0 ? t('recommendations.requestCategorySelected', { title: category.title, count: selectedCount }) : category.title}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={onToggleSection}
+        style={styles.requestAccordionHeader}
+      >
         <Text style={styles.requestAccordionTitle}>{category.title}</Text>
         <View style={styles.requestAccordionMeta}>
           {selectedCount > 0 ? <Text style={styles.requestAccordionCount}>{selectedCount}</Text> : null}
@@ -1300,7 +1333,7 @@ function parseRecommendationRequestTags(value: string) {
     .filter(Boolean);
 }
 
-function buildRequestTagCategories(tags: string[], language: 'zh' | 'en'): RequestTagCategory[] {
+function buildRequestTagCategories(tags: string[], language: 'zh' | 'en', t: TFunction): RequestTagCategory[] {
   const categories = {
     cuisine: new Set(language === 'en'
       ? ['Cantonese style', 'Light and less oily', 'Not spicy', 'Rice-friendly', 'Home-style', 'Warming food', 'Steamed dishes', 'Braise or stew']
@@ -1331,34 +1364,10 @@ function buildRequestTagCategories(tags: string[], language: 'zh' | 'en'): Reque
   }
 
   return [
-    { key: 'cuisine', title: requestCategoryTitle('cuisine', language), tags: grouped.cuisine },
-    { key: 'meal', title: requestCategoryTitle('meal', language), tags: grouped.meal },
-    { key: 'dietary', title: requestCategoryTitle('dietary', language), tags: grouped.dietary },
+    { key: 'cuisine', title: t('recommendations.requestCategoryCuisine'), tags: grouped.cuisine },
+    { key: 'meal', title: t('recommendations.requestCategoryMeal'), tags: grouped.meal },
+    { key: 'dietary', title: t('recommendations.requestCategoryDietary'), tags: grouped.dietary },
   ];
-}
-
-function requestCategoryTitle(key: RequestTagCategoryKey, language: 'zh' | 'en') {
-  if (language === 'en') {
-    if (key === 'cuisine') {
-      return 'Cuisine style';
-    }
-    if (key === 'meal') {
-      return 'Meal type';
-    }
-    return 'Dietary';
-  }
-
-  if (key === 'cuisine') {
-    return '口味风格';
-  }
-  if (key === 'meal') {
-    return '餐食类型';
-  }
-  return '饮食偏好';
-}
-
-function requestHelperShort(language: 'zh' | 'en') {
-  return language === 'en' ? 'Choose tags to guide the next recommendation.' : '选择标签来调整本次推荐。';
 }
 
 function buildRecommendationRequest(tags: string[], language: 'zh' | 'en') {
@@ -1578,6 +1587,7 @@ function createStyles(appColors: AppColorTokens) {
     opacity: 0.46,
   },
   textActionLabel: {
+    flexShrink: 1,
     color: appColors.primary,
     fontSize: 15,
     fontWeight: '600',
@@ -1718,6 +1728,10 @@ function createStyles(appColors: AppColorTokens) {
     gap: spacing.md,
     padding: spacing.xl,
   },
+  loadingStatus: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   emptyTitle: {
     color: appColors.textPrimary,
     fontSize: 20,
@@ -1768,10 +1782,12 @@ function createStyles(appColors: AppColorTokens) {
   },
   ingredientGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   ingredientPanel: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 140,
     backgroundColor: appColors.surfaceRaised,
     borderColor: appColors.border,
     borderWidth: 1,

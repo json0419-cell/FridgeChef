@@ -27,7 +27,7 @@ export function MyScreen({ navigation }: Props) {
         contentContainerStyle={{ gap: spacing.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: 112 }}
       >
         <View style={{ gap: spacing.sm }}>
-          <Text selectable style={{ color: colors.textPrimary, fontSize: 30, fontWeight: '800', lineHeight: 37 }}>
+          <Text selectable accessibilityRole="header" style={{ color: colors.textPrimary, fontSize: 30, fontWeight: '800', lineHeight: 37 }}>
             {t('my.title')}
           </Text>
           <Text selectable style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 23 }}>

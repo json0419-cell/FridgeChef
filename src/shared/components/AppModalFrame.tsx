@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   radii,
   semanticShadows,
@@ -44,18 +44,20 @@ export function AppModalFrame({
           style={styles.card}
           onPress={(event) => event.stopPropagation()}
         >
-          <View style={styles.header}>
-            <Text style={[styles.badge, styles[`${tone}Badge`]]}>{toneLabel}</Text>
-          </View>
-          <Text
-            accessibilityLiveRegion={announce ? 'polite' : 'none'}
-            accessibilityRole={announce ? 'alert' : 'header'}
-            style={styles.title}
-          >
-            {title}
-          </Text>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-          {children}
+          <ScrollView contentContainerStyle={styles.content}>
+            <View style={styles.header}>
+              <Text style={[styles.badge, styles[`${tone}Badge`]]}>{toneLabel}</Text>
+            </View>
+            <Text
+              accessibilityLiveRegion={announce ? 'polite' : 'none'}
+              accessibilityRole={announce ? 'alert' : 'header'}
+              style={styles.title}
+            >
+              {title}
+            </Text>
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+            {children}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -74,13 +76,17 @@ function createStyles(colors: AppColorTokens) {
     card: {
       width: '100%',
       maxWidth: 420,
+      maxHeight: '100%',
       borderRadius: radii.xl,
       borderColor: colors.borderStrong,
       borderWidth: 1,
       backgroundColor: colors.surface,
+      overflow: 'hidden',
+      ...semanticShadows.card,
+    },
+    content: {
       padding: spacing.xl,
       gap: spacing.md,
-      ...semanticShadows.card,
     },
     header: {
       flexDirection: 'row',

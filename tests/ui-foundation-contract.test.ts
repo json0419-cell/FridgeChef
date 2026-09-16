@@ -44,3 +44,46 @@ test('screen readers hear selectable controls without losing disabled state', ()
     selected: false,
   });
 });
+
+function relativeLuminance(hex: string) {
+  const value = Number.parseInt(hex.slice(1), 16);
+  const channels = [value >> 16, (value >> 8) & 255, value & 255].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+test('text stays readable at WCAG AA contrast in light and dark appearances', () => {
+  const readablePairs = [
+    ['textPrimary', 'canvas'],
+    ['textSecondary', 'canvas'],
+    ['textTertiary', 'canvas'],
+    ['textSecondary', 'surface'],
+    ['textTertiary', 'surface'],
+    ['textSecondary', 'surfaceMuted'],
+    ['textTertiary', 'surfaceDisabled'],
+    ['primary', 'surface'],
+    ['primary', 'primaryMuted'],
+    ['onPrimary', 'primary'],
+    ['textInverse', 'danger'],
+    ['textInverse', 'success'],
+    ['warning', 'accentMuted'],
+    ['info', 'infoMuted'],
+    ['danger', 'surface'],
+    ['danger', 'dangerMuted'],
+  ] as const;
+
+  for (const appearance of ['light', 'dark'] as const) {
+    const { colors } = resolveAppTheme(appearance);
+    for (const [foreground, background] of readablePairs) {
+      const ratio = contrastRatio(colors[foreground], colors[background]);
+      assert.ok(ratio >= 4.5, `${appearance} ${foreground} on ${background} is ${ratio.toFixed(2)}:1`);
+    }
+  }
+});

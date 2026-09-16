@@ -606,6 +606,8 @@ function createFoundationStyles(colors: AppColorTokens) {
   },
   buttonText: {
     ...typeScale.label,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   fullWidth: {
     width: '100%',

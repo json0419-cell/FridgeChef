@@ -24,6 +24,8 @@ type HomeSnapshot = {
   sourceReady: boolean;
 };
 
+const LARGE_TEXT_FONT_SCALE = 1.3;
+
 const INITIAL_SNAPSHOT: HomeSnapshot = {
   consentReady: false,
   ingredients: [],
@@ -156,7 +158,7 @@ export function HomeScreen({ navigation }: Props) {
               />
             </View>
             <View style={{ alignItems: 'center', gap: spacing.sm }}>
-              <Text selectable style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 41, textAlign: 'center' }}>
+              <Text selectable accessibilityRole="header" style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 41, textAlign: 'center' }}>
                 {t('home.title')}
               </Text>
               <Text selectable style={{ maxWidth: 360, color: colors.textSecondary, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>
@@ -214,7 +216,7 @@ export function HomeScreen({ navigation }: Props) {
               })}
             >
               <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
-              <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
+              <Text style={{ flexShrink: 1, color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21, textAlign: 'center' }}>
                 {getFridgeButtonLabel(inventoryStatus, snapshot.ingredients.length, t)}
               </Text>
             </Pressable>
@@ -224,6 +226,7 @@ export function HomeScreen({ navigation }: Props) {
 
       <HomePromptModal
         colors={colors}
+        stackActions={fontScale >= LARGE_TEXT_FONT_SCALE}
         visible={Boolean(prompt && promptCopy)}
         title={promptCopy?.title ?? ''}
         message={promptCopy?.message ?? ''}
@@ -264,8 +267,9 @@ function IconButton({ colors, icon: Icon, label, onPress }: { colors: AppColorTo
   );
 }
 
-function HomePromptModal({ colors, visible, title, message, cancelLabel, confirmLabel, onCancel, onConfirm }: {
+function HomePromptModal({ colors, stackActions, visible, title, message, cancelLabel, confirmLabel, onCancel, onConfirm }: {
   colors: AppColorTokens;
+  stackActions: boolean;
   visible: boolean;
   title: string;
   message: string;
@@ -276,37 +280,40 @@ function HomePromptModal({ colors, visible, title, message, cancelLabel, confirm
 }) {
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={{ flex: 1, backgroundColor: colors.overlay, padding: spacing.lg, alignItems: 'center', justifyContent: 'center' }} onPress={onCancel}>
+      <Pressable accessible={false} style={{ flex: 1, backgroundColor: colors.overlay, padding: spacing.lg, alignItems: 'center', justifyContent: 'center' }} onPress={onCancel}>
         <Pressable
+          accessible={false}
           accessibilityViewIsModal
           onPress={(event) => event.stopPropagation()}
-          style={{ width: '100%', maxWidth: 420, borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: spacing.xl, gap: spacing.lg }}
+          style={{ width: '100%', maxWidth: 420, maxHeight: '100%', borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' }}
         >
-          <View style={{ width: 48, height: 48, borderRadius: 16, borderCurve: 'continuous', backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' }}>
-            <AlertTriangle color={colors.warning} size={24} strokeWidth={2} />
-          </View>
-          <View style={{ gap: spacing.sm }}>
-            <Text selectable accessibilityRole="header" style={{ color: colors.textPrimary, fontSize: 23, fontWeight: '900', lineHeight: 29 }}>{title}</Text>
-            <Text selectable style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>{message}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <ModalButton colors={colors} label={cancelLabel} onPress={onCancel} secondary />
-            <ModalButton colors={colors} label={confirmLabel} onPress={onConfirm} />
-          </View>
+          <ScrollView contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }}>
+            <View style={{ width: 48, height: 48, borderRadius: 16, borderCurve: 'continuous', backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' }}>
+              <AlertTriangle color={colors.warning} size={24} strokeWidth={2} />
+            </View>
+            <View style={{ gap: spacing.sm }}>
+              <Text selectable accessibilityRole="header" style={{ color: colors.textPrimary, fontSize: 23, fontWeight: '900', lineHeight: 29 }}>{title}</Text>
+              <Text selectable style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>{message}</Text>
+            </View>
+            <View style={{ flexDirection: stackActions ? 'column' : 'row', gap: spacing.sm }}>
+              <ModalButton colors={colors} stretch={!stackActions} label={cancelLabel} onPress={onCancel} secondary />
+              <ModalButton colors={colors} stretch={!stackActions} label={confirmLabel} onPress={onConfirm} />
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
 
-function ModalButton({ colors, label, onPress, secondary = false }: { colors: AppColorTokens; label: string; onPress: () => void; secondary?: boolean }) {
+function ModalButton({ colors, stretch, label, onPress, secondary = false }: { colors: AppColorTokens; stretch: boolean; label: string; onPress: () => void; secondary?: boolean }) {
   return (
     <Pressable
       accessibilityLabel={label}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => ({
-        flex: 1,
+        flex: stretch ? 1 : undefined,
         minHeight: 50,
         borderRadius: radii.md,
         borderCurve: 'continuous',

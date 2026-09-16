@@ -61,7 +61,7 @@ export function FridgeScreen({ navigation }: Props) {
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.intakeSection}>
-              <Text style={styles.sectionTitle}>{t('fridge.actionsTitle')}</Text>
+              <Text accessibilityRole="header" style={styles.sectionTitle}>{t('fridge.actionsTitle')}</Text>
               <View style={styles.actionRow}>
                 <Button
                   title={t('fridge.addManual')}
@@ -78,33 +78,33 @@ export function FridgeScreen({ navigation }: Props) {
             </View>
 
             {loadError ? (
-              <View style={styles.errorCard}>
+              <View accessible accessibilityLiveRegion="polite" accessibilityRole="alert" style={styles.errorCard}>
                 <Text style={styles.errorTitle}>{t('fridge.loadFailed')}</Text>
                 <Text style={styles.errorText}>{loadError}</Text>
               </View>
             ) : null}
 
             {deleteError ? (
-              <View style={styles.errorCard}>
+              <View accessible accessibilityLiveRegion="polite" accessibilityRole="alert" style={styles.errorCard}>
                 <Text style={styles.errorTitle}>{t('fridge.deleteFailed')}</Text>
                 <Text style={styles.errorText}>{deleteError}</Text>
               </View>
             ) : null}
 
             <View style={styles.inventoryHeader}>
-              <Text style={styles.inventoryTitle}>{t('fridge.inventoryTitle')}</Text>
+              <Text accessibilityRole="header" style={styles.inventoryTitle}>{t('fridge.inventoryTitle')}</Text>
             </View>
           </View>
         }
         ListEmptyComponent={
           loading ? (
-            <View style={styles.loadingCard}>
+            <View accessible accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} style={styles.loadingCard}>
               <ActivityIndicator color={appColors.primary} />
               <Text style={styles.loadingText}>{t('fridge.loading')}</Text>
             </View>
           ) : (
             <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyTitle}>{t('fridge.emptyTitle')}</Text>
+              <Text accessibilityRole="header" style={styles.emptyTitle}>{t('fridge.emptyTitle')}</Text>
               <Text style={styles.emptyText}>{t('fridge.emptyText')}</Text>
               <View style={styles.emptyActions}>
                 <Button title={t('fridge.addManual')} onPress={() => navigation.navigate('AddIngredient', { mode: 'manual' })} />
@@ -121,7 +121,7 @@ export function FridgeScreen({ navigation }: Props) {
           <View style={styles.ingredientRow}>
             <IngredientAvatar color={appColors.primary} backgroundColor={appColors.surfaceMuted} />
             <View style={styles.ingredientSummary}>
-              <Text style={styles.ingredientName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.ingredientName}>{item.name}</Text>
               <Text style={styles.meta}>
                 {formatQuantity(item.quantity)} {item.unit}
               </Text>
@@ -130,10 +130,20 @@ export function FridgeScreen({ navigation }: Props) {
               </Text>
             </View>
             <View style={styles.rowActions}>
-              <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => navigation.navigate('AddIngredient', { ingredientId: item.id })}>
+              <Pressable
+                accessibilityLabel={t('fridge.editIngredient', { name: item.name })}
+                accessibilityRole="button"
+                style={styles.linkButton}
+                onPress={() => navigation.navigate('AddIngredient', { ingredientId: item.id })}
+              >
                 <Text style={styles.linkText}>{t('common.edit')}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => confirmDelete(item)}>
+              <Pressable
+                accessibilityLabel={t('fridge.deleteIngredient', { name: item.name })}
+                accessibilityRole="button"
+                style={styles.linkButton}
+                onPress={() => confirmDelete(item)}
+              >
                 <Text style={[styles.linkText, styles.deleteText]}>{t('common.delete')}</Text>
               </Pressable>
             </View>
@@ -199,6 +209,7 @@ function createStyles(appColors: AppColorTokens) {
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
   },
   sectionTitle: {
@@ -208,7 +219,8 @@ function createStyles(appColors: AppColorTokens) {
     lineHeight: 22,
   },
   actionButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 160,
   },
   errorCard: {
     backgroundColor: appColors.surface,
@@ -314,6 +326,7 @@ function createStyles(appColors: AppColorTokens) {
   linkButton: {
     minHeight: 48,
     minWidth: 48,
+    justifyContent: 'center',
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
   },

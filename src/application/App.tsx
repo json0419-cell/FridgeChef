@@ -224,12 +224,12 @@ function MainTabsNavigator() {
           tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size }) => <Icon color={color} size={Math.min(size, 23)} strokeWidth={2} />,
           tabBarItemStyle: { minHeight: tabBarHeight - 8, paddingVertical: 5 },
-          tabBarLabel: ({ color }) => (
+          tabBarLabel: ({ color, focused }) => (
             <Text
               allowFontScaling
               maxFontSizeMultiplier={2}
               numberOfLines={3}
-              style={{ color, fontSize: 12, fontWeight: '600', lineHeight: 15, textAlign: 'center' }}
+              style={{ color, fontSize: 12, fontWeight: focused ? '900' : '600', lineHeight: 15, textAlign: 'center', textDecorationLine: focused ? 'underline' : 'none' }}
             >
               {t(visibleLabelKey)}
             </Text>
