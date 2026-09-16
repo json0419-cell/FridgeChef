@@ -117,18 +117,33 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
-export function AppTextInput({ style, multiline, ...props }: TextInputProps) {
+interface AppTextInputProps extends TextInputProps {
+  invalid?: boolean;
+}
+
+export function AppTextInput({ style, multiline, invalid = false, onBlur, onFocus, ...props }: AppTextInputProps) {
   const { colors } = useAppTheme();
   const styles = useAppLayoutStyles();
+  const [focused, setFocused] = useState(false);
 
   return (
     <TextInput
-      accessibilityState={{ disabled: props.editable === false }}
+      {...props}
+      accessibilityLabel={props.accessibilityLabel ?? (typeof props.placeholder === 'string' ? props.placeholder : undefined)}
+      accessibilityState={{ ...props.accessibilityState, disabled: props.editable === false }}
+      aria-invalid={invalid}
       placeholderTextColor={colors.textTertiary}
       multiline={multiline}
+      onBlur={(event) => {
+        setFocused(false);
+        onBlur?.(event);
+      }}
+      onFocus={(event) => {
+        setFocused(true);
+        onFocus?.(event);
+      }}
       textAlignVertical={multiline ? 'top' : props.textAlignVertical}
-      style={[styles.input, multiline && styles.inputMultiline, style]}
-      {...props}
+      style={[styles.input, multiline && styles.inputMultiline, focused && styles.focused, invalid && styles.inputError, style]}
     />
   );
 }
@@ -242,6 +257,7 @@ function createAppLayoutStyles(colors: AppColorTokens) {
   },
   textAction: {
     minHeight: buttonHeights.md,
+    minWidth: buttonHeights.md,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
@@ -296,6 +312,10 @@ function createAppLayoutStyles(colors: AppColorTokens) {
   inputMultiline: {
     minHeight: 104,
     lineHeight: 22,
+  },
+  inputError: {
+    borderColor: colors.danger,
+    borderWidth: 2,
   },
   pressed: {
     opacity: 0.86,

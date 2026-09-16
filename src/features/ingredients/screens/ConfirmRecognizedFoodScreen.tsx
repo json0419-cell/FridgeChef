@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppCard, AppTextInput } from '../../../shared/components/AppLayout';
-import { StatusBadge } from '../../../shared/components/Foundation';
+import { AppCard, AppTextInput, Button, StatusBadge } from '../../../shared/components';
 import { addIngredients } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
-import { colors, spacing } from '../../../shared/theme/theme';
+import { spacing, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, IngredientDraft } from '../../../types';
 
 type Props = FridgeStackScreenProps<'ConfirmRecognizedFood'>;
@@ -23,6 +22,8 @@ interface EditableRecognizedItem {
 
 export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
   const { t } = useI18n();
+  const { colors: appColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(appColors), [appColors]);
   const [items, setItems] = useState<EditableRecognizedItem[]>(
     route.params.items.map((item, index) => ({
       localId: `${index}_${item.name}`,
@@ -111,7 +112,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
           <AppCard style={styles.card}>
             <View style={styles.cardTop}>
               <StatusBadge label={item.category || t('confirm.uncategorized')} tone="success" />
-              <Pressable accessibilityRole="button" onPress={() => removeItem(item.localId)}>
+              <Pressable accessibilityLabel={t('common.delete')} accessibilityRole="button" onPress={() => removeItem(item.localId)} style={styles.deleteButton}>
                 <Text style={styles.deleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
@@ -144,28 +145,11 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
         )}
         ListFooterComponent={
           <View style={styles.footer}>
-            <ActionButton title={t('confirm.submit', { count: validCount })} onPress={confirm} loading={saving} disabled={validCount === 0} />
+            <Button title={t('confirm.submit', { count: validCount })} onPress={confirm} loading={saving} disabled={validCount === 0} fullWidth />
           </View>
         }
       />
     </SafeAreaView>
-  );
-}
-
-function ActionButton({ title, onPress, disabled = false, loading = false }: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean }) {
-  const inactive = disabled || loading;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: loading }}
-      disabled={inactive}
-      onPress={onPress}
-      style={({ pressed }) => [styles.actionButton, inactive && styles.actionButtonDisabled, pressed && !inactive && styles.actionButtonPressed]}
-    >
-      {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
-      <Text style={styles.actionButtonText}>{title}</Text>
-    </Pressable>
   );
 }
 
@@ -179,56 +163,57 @@ function parseConfirmedQuantity(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-const styles = StyleSheet.create({
+function createStyles(appColors: AppColorTokens) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.canvas,
   },
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.canvas,
   },
   header: {
     gap: 6,
   },
   pageTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 26,
   },
   pageSubtitle: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 20,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 16,
     shadowOpacity: 0,
     elevation: 0,
   },
   emptyStateCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 20,
     gap: 6,
   },
   emptyTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     lineHeight: 22,
   },
   emptyText: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -237,8 +222,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  deleteButton: {
+    minHeight: 48,
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   deleteText: {
-    color: colors.danger,
+    color: appColors.danger,
     fontWeight: '900',
   },
   row: {
@@ -251,39 +242,19 @@ const styles = StyleSheet.create({
   input: {
     height: 48,
     minHeight: 48,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 10,
     paddingHorizontal: 16,
   },
   notes: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 20,
     fontWeight: '700',
   },
   footer: {
     marginTop: spacing.sm,
   },
-  actionButton: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#1B4332',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  actionButtonDisabled: {
-    opacity: 0.46,
-  },
-  actionButtonPressed: {
-    opacity: 0.88,
-  },
-});
+  });
+}

@@ -1,20 +1,20 @@
-import { useCallback, useEffect } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useMemo } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Apple, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIngredientInventory } from '../hooks/useIngredientInventory';
 import { useI18n } from '../../../i18n/i18n';
-import { colors, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
+import { Button } from '../../../shared/components';
+import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, Ingredient } from '../../../types';
 
 type Props = FridgeStackScreenProps<'Fridge'>;
-type ActionButtonVariant = 'primary' | 'secondary';
-
 export function FridgeScreen({ navigation }: Props) {
   const { language, t } = useI18n();
   const { colors: appColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(appColors), [appColors]);
   const tabBarHeight = useBottomTabBarHeight();
   const { ingredients, loading, loadError, deleteError, loadIngredients, deleteInventoryIngredient } = useIngredientInventory();
 
@@ -22,11 +22,11 @@ export function FridgeScreen({ navigation }: Props) {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity accessibilityLabel={t('nav.settings')} accessibilityRole="button" onPress={() => navigation.navigate('Settings')} style={styles.headerSettingsButton}>
-          <SlidersHorizontal size={20} color="#6B6B6B" strokeWidth={2} />
+          <SlidersHorizontal size={20} color={appColors.textSecondary} strokeWidth={2} />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, t]);
+  }, [appColors.textSecondary, navigation, styles.headerSettingsButton, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -63,12 +63,12 @@ export function FridgeScreen({ navigation }: Props) {
             <View style={styles.intakeSection}>
               <Text style={styles.sectionTitle}>{t('fridge.actionsTitle')}</Text>
               <View style={styles.actionRow}>
-                <ActionButton
+                <Button
                   title={t('fridge.addManual')}
                   onPress={() => navigation.navigate('AddIngredient', { mode: 'manual' })}
                   style={styles.actionButton}
                 />
-                <ActionButton
+                <Button
                   title={t('fridge.scanPhoto')}
                   variant="secondary"
                   onPress={() => navigation.navigate('AddIngredient', { mode: 'photo' })}
@@ -99,7 +99,7 @@ export function FridgeScreen({ navigation }: Props) {
         ListEmptyComponent={
           loading ? (
             <View style={styles.loadingCard}>
-              <ActivityIndicator color={colors.primary} />
+              <ActivityIndicator color={appColors.primary} />
               <Text style={styles.loadingText}>{t('fridge.loading')}</Text>
             </View>
           ) : (
@@ -107,8 +107,8 @@ export function FridgeScreen({ navigation }: Props) {
               <Text style={styles.emptyTitle}>{t('fridge.emptyTitle')}</Text>
               <Text style={styles.emptyText}>{t('fridge.emptyText')}</Text>
               <View style={styles.emptyActions}>
-                <ActionButton title={t('fridge.addManual')} onPress={() => navigation.navigate('AddIngredient', { mode: 'manual' })} />
-                <ActionButton
+                <Button title={t('fridge.addManual')} onPress={() => navigation.navigate('AddIngredient', { mode: 'manual' })} />
+                <Button
                   title={t('fridge.scanPhoto')}
                   variant="secondary"
                   onPress={() => navigation.navigate('AddIngredient', { mode: 'photo' })}
@@ -119,7 +119,7 @@ export function FridgeScreen({ navigation }: Props) {
         }
         renderItem={({ item }) => (
           <View style={styles.ingredientRow}>
-            <IngredientAvatar />
+            <IngredientAvatar color={appColors.primary} backgroundColor={appColors.surfaceMuted} />
             <View style={styles.ingredientSummary}>
               <Text style={styles.ingredientName} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.meta}>
@@ -144,40 +144,11 @@ export function FridgeScreen({ navigation }: Props) {
   );
 }
 
-function IngredientAvatar() {
+function IngredientAvatar({ color, backgroundColor }: { color: string; backgroundColor: string }) {
   return (
-    <View style={styles.ingredientAvatar}>
-      <Apple size={20} color="#1B4332" strokeWidth={2} />
+    <View style={[avatarStyles.ingredientAvatar, { backgroundColor }]}>
+      <Apple size={20} color={color} strokeWidth={2} />
     </View>
-  );
-}
-
-function ActionButton({
-  title,
-  onPress,
-  variant = 'primary',
-  style,
-}: {
-  title: string;
-  onPress: () => void;
-  variant?: ActionButtonVariant;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const secondary = variant === 'secondary';
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.solidButton,
-        secondary ? styles.solidButtonSecondary : styles.solidButtonPrimary,
-        pressed && styles.solidButtonPressed,
-        style,
-      ]}
-    >
-      <Text style={[styles.solidButtonText, secondary && styles.solidButtonTextSecondary]}>{title}</Text>
-    </Pressable>
   );
 }
 
@@ -190,10 +161,21 @@ function formatDate(value: string, language: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN');
 }
 
-const styles = StyleSheet.create({
+const avatarStyles = StyleSheet.create({
+  ingredientAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+function createStyles(appColors: AppColorTokens) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.canvas,
   },
   content: {
     paddingHorizontal: spacing.lg,
@@ -201,6 +183,8 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   headerSettingsButton: {
+    minHeight: 48,
+    minWidth: 48,
     padding: 12,
     marginRight: -12,
     alignItems: 'center',
@@ -218,7 +202,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   sectionTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     lineHeight: 22,
@@ -227,35 +211,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   errorCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 16,
     gap: 6,
   },
   errorTitle: {
-    color: colors.danger,
+    color: appColors.danger,
     fontSize: 16,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   errorText: {
-    color: colors.text,
+    color: appColors.textPrimary,
     lineHeight: 21,
     fontFamily: typography.body,
   },
   loadingCard: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 20,
     gap: spacing.sm,
   },
   loadingText: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontWeight: '700',
     fontFamily: typography.body,
   },
@@ -264,77 +248,40 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   emptyStateCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 20,
     gap: 8,
   },
   emptyTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     lineHeight: 22,
   },
   emptyText: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 20,
-  },
-  solidButton: {
-    borderRadius: 12,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  solidButtonPrimary: {
-    height: 48,
-    backgroundColor: '#1B4332',
-  },
-  solidButtonSecondary: {
-    height: 48,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
-    borderWidth: 1,
-  },
-  solidButtonPressed: {
-    opacity: 0.88,
-  },
-  solidButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '500',
-    fontFamily: typography.strong,
-  },
-  solidButtonTextSecondary: {
-    color: '#1B4332',
   },
   ingredientRow: {
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: appColors.border,
     paddingVertical: 10,
-  },
-  ingredientAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F5F7F5',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   inventoryHeader: {
     marginBottom: 4,
   },
   inventoryTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     lineHeight: 22,
@@ -344,18 +291,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ingredientName: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     fontFamily: typography.strong,
   },
   meta: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 14,
     fontWeight: '400',
   },
   sourceText: {
-    color: colors.muted,
+    color: appColors.textTertiary,
     fontSize: 12,
     fontFamily: typography.body,
   },
@@ -365,16 +312,19 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   linkButton: {
+    minHeight: 48,
+    minWidth: 48,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
   },
   linkText: {
-    color: colors.primary,
+    color: appColors.primary,
     fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   deleteText: {
-    color: colors.danger,
+    color: appColors.danger,
   },
-});
+  });
+}

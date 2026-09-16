@@ -302,6 +302,7 @@ interface FormFieldProps {
 export function FormField({ label, description, error, required = false, requiredLabel = '*', children, inputProps, style }: FormFieldProps) {
   const { colors } = useAppTheme();
   const styles = useFoundationStyles();
+  const [focused, setFocused] = useState(false);
 
   return (
     <View style={[styles.formField, style]}>
@@ -312,13 +313,33 @@ export function FormField({ label, description, error, required = false, require
       {description ? <Text style={styles.formDescription}>{description}</Text> : null}
       {children ?? (
         <TextInput
-          accessibilityState={{ disabled: inputProps?.editable === false }}
-          placeholderTextColor={colors.textTertiary}
-          style={[styles.input, inputProps?.multiline && styles.inputMultiline]}
           {...inputProps}
+          accessibilityHint={inputProps?.accessibilityHint ?? error ?? description}
+          accessibilityLabel={inputProps?.accessibilityLabel ?? label}
+          accessibilityState={{
+            ...inputProps?.accessibilityState,
+            disabled: inputProps?.editable === false,
+          }}
+          aria-invalid={Boolean(error)}
+          onBlur={(event) => {
+            setFocused(false);
+            inputProps?.onBlur?.(event);
+          }}
+          onFocus={(event) => {
+            setFocused(true);
+            inputProps?.onFocus?.(event);
+          }}
+          placeholderTextColor={colors.textTertiary}
+          style={[
+            styles.input,
+            inputProps?.multiline && styles.inputMultiline,
+            focused && styles.controlFocused,
+            error && styles.inputError,
+            inputProps?.style,
+          ]}
         />
       )}
-      {error ? <Text accessibilityLiveRegion="polite" style={styles.formError}>{error}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="polite" accessibilityRole="alert" style={styles.formError}>{error}</Text> : null}
     </View>
   );
 }
@@ -544,6 +565,7 @@ function createFoundationStyles(colors: AppColorTokens) {
   },
   button: {
     minHeight: buttonHeights.md,
+    minWidth: buttonHeights.md,
     borderRadius: radii.pill,
     borderWidth: borders.regular,
     paddingHorizontal: spacing.lg,
@@ -693,12 +715,17 @@ function createFoundationStyles(colors: AppColorTokens) {
     fontFamily: typography.body,
     fontSize: 16,
   },
+  inputError: {
+    borderColor: colors.danger,
+    borderWidth: 2,
+  },
   inputMultiline: {
     minHeight: inputHeights.multiline,
     textAlignVertical: 'top',
   },
   chip: {
     minHeight: buttonHeights.md,
+    minWidth: buttonHeights.md,
     borderRadius: radii.pill,
     borderWidth: borders.regular,
     borderColor: colors.border,
@@ -738,6 +765,7 @@ function createFoundationStyles(colors: AppColorTokens) {
   },
   chipMainAction: {
     minHeight: buttonHeights.md,
+    minWidth: buttonHeights.md,
     flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',

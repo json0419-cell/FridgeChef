@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle2, ChevronDown, ChevronRight, Circle } from 'lucide-react-native';
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
+import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { refineRagRecommendationsWithProvider } from '../../../ai/recommendationRefiner';
 import { markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
 import { useI18n } from '../../../i18n/i18n';
@@ -15,7 +16,7 @@ import { getRagRecommendations, type RagResult } from '../../../rag/ragService';
 import { loadRecommendationCache, saveRecommendationCache } from '../../../storage/recommendationCacheStorage';
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../../../storage/recommendationTagStorage';
 import { getApiKey, getSettings } from '../../../storage/settingsStorage';
-import { colors, radii, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
+import { radii, spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import { classifyRecommendationCache } from '../recommendation-cache-policy';
 import {
   getRecommendationInputSnapshot,
@@ -35,7 +36,6 @@ type Props = RecommendationsStackScreenProps<'Recommendations'>;
 
 type RecommendationListItem = { kind: 'refined'; recommendation: RefinedRagRecommendation };
 type TFunction = ReturnType<typeof useI18n>['t'];
-type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 type RequestTagCategoryKey = 'cuisine' | 'meal' | 'dietary';
 type RequestTagCategory = {
   key: RequestTagCategoryKey;
@@ -101,6 +101,7 @@ const REQUEST_TAGS_EN = [
 export function RecommendationsScreen({ navigation, route }: Props) {
   const { language, t } = useI18n();
   const { colors: appColors } = useAppTheme();
+  const styles = useRecommendationStyles();
   const { showFeedback } = useFeedback();
   const insets = useSafeAreaInsets();
   const [refinedRecommendations, setRefinedRecommendations] = useState<RefinedRagRecommendation[]>([]);
@@ -679,7 +680,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
         <View style={styles.loadingScreen}>
-          <ActivityIndicator color="#1B4332" size="large" />
+          <ActivityIndicator color={appColors.primary} size="large" />
           <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
           <Text style={styles.emptyText}>{t('recommendations.loadingText')}</Text>
         </View>
@@ -737,7 +738,6 @@ export function RecommendationsScreen({ navigation, route }: Props) {
                         key={tag}
                         label={tag}
                         active
-                        compact
                         onPress={() => toggleRecommendationRequestTag(tag)}
                       />
                     ))}
@@ -754,6 +754,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
                     onToggleSection={() => toggleRequestSection(category.key)}
                     onToggleTag={toggleRecommendationRequestTag}
                     onDeleteTag={(tag) => void deleteRecommendationRequestTag(tag)}
+                    t={t}
                   />
                 ))}
               </View>
@@ -834,7 +835,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           <AppCard style={[styles.minimalCard, styles.empty]}>
             {loading ? (
               <>
-                <ActivityIndicator color={colors.primary} />
+                <ActivityIndicator color={appColors.primary} />
                 <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
                 <Text style={styles.emptyText}>{t('recommendations.loadingText')}</Text>
               </>
@@ -954,6 +955,8 @@ function ReadinessChecklist({
   onOpenSource: () => void;
   t: TFunction;
 }) {
+  const { colors: appColors } = useAppTheme();
+  const styles = useRecommendationStyles();
   const items = [
     { key: 'consent', label: t('recommendations.readinessConsent'), ready: readiness.consentReady, onPress: onOpenConsent },
     { key: 'credential', label: t('recommendations.readinessCredential'), ready: readiness.credentialReady, onPress: onOpenCredential },
@@ -972,7 +975,7 @@ function ReadinessChecklist({
               : t('recommendations.readinessIncomplete')}
           </Text>
         </View>
-        {loading ? <ActivityIndicator color={colors.primary} size="small" /> : null}
+        {loading ? <ActivityIndicator color={appColors.primary} size="small" /> : null}
       </View>
       <View style={styles.readinessList}>
         {items.map((item) => (
@@ -988,60 +991,19 @@ function ReadinessChecklist({
             ]}
           >
             {item.ready ? (
-              <CheckCircle2 color={colors.primary} size={21} strokeWidth={2.2} />
+              <CheckCircle2 color={appColors.primary} size={21} strokeWidth={2.2} />
             ) : (
-              <Circle color={colors.muted} size={21} strokeWidth={2} />
+              <Circle color={appColors.textTertiary} size={21} strokeWidth={2} />
             )}
             <Text style={[styles.readinessLabel, item.ready && styles.readinessLabelReady]}>{item.label}</Text>
             <Text style={styles.readinessStatus}>
               {item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired')}
             </Text>
-            {!item.ready ? <ChevronRight color={colors.muted} size={19} strokeWidth={2} /> : null}
+            {!item.ready ? <ChevronRight color={appColors.textTertiary} size={19} strokeWidth={2} /> : null}
           </Pressable>
         ))}
       </View>
     </AppCard>
-  );
-}
-
-function ActionButton({
-  title,
-  onPress,
-  variant = 'primary',
-  disabled = false,
-  loading = false,
-  style,
-}: {
-  title: string;
-  onPress: () => void;
-  variant?: ActionButtonVariant;
-  disabled?: boolean;
-  loading?: boolean;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const inactive = disabled || loading;
-  const secondary = variant === 'secondary';
-  const destructive = variant === 'destructive';
-  const spinnerColor = secondary ? '#1B4332' : '#FFFFFF';
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: loading }}
-      disabled={inactive}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        secondary && styles.actionButtonSecondary,
-        destructive && styles.actionButtonDestructive,
-        inactive && styles.actionButtonDisabled,
-        pressed && !inactive && styles.actionButtonPressed,
-        style,
-      ]}
-    >
-      {loading ? <ActivityIndicator color={spinnerColor} size="small" /> : null}
-      <Text style={[styles.actionButtonText, secondary && styles.actionButtonTextSecondary, inactive && styles.actionButtonTextDisabled]}>{title}</Text>
-    </Pressable>
   );
 }
 
@@ -1056,6 +1018,8 @@ function TextAction({
   disabled?: boolean;
   loading?: boolean;
 }) {
+  const { colors: appColors } = useAppTheme();
+  const styles = useRecommendationStyles();
   const inactive = disabled || loading;
 
   return (
@@ -1066,7 +1030,7 @@ function TextAction({
       onPress={onPress}
       style={({ pressed }) => [styles.textAction, inactive && styles.textActionDisabled, pressed && !inactive && styles.textActionPressed]}
     >
-      {loading ? <ActivityIndicator color="#1B4332" size="small" /> : null}
+      {loading ? <ActivityIndicator color={appColors.primary} size="small" /> : null}
       <Text style={styles.textActionLabel}>{title}</Text>
     </Pressable>
   );
@@ -1079,6 +1043,7 @@ function RequestTagAccordion({
   onToggleSection,
   onToggleTag,
   onDeleteTag,
+  t,
 }: {
   category: RequestTagCategory;
   expanded: boolean;
@@ -1086,7 +1051,10 @@ function RequestTagAccordion({
   onToggleSection: () => void;
   onToggleTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
+  t: TFunction;
 }) {
+  const { colors: appColors } = useAppTheme();
+  const styles = useRecommendationStyles();
   const selectedCount = category.tags.filter((tag) => isRequestTagSelected(recommendationRequest, tag)).length;
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
@@ -1096,7 +1064,7 @@ function RequestTagAccordion({
         <Text style={styles.requestAccordionTitle}>{category.title}</Text>
         <View style={styles.requestAccordionMeta}>
           {selectedCount > 0 ? <Text style={styles.requestAccordionCount}>{selectedCount}</Text> : null}
-          <Chevron size={18} color="#6B6B6B" strokeWidth={2} />
+          <Chevron size={18} color={appColors.textSecondary} strokeWidth={2} />
         </View>
       </Pressable>
       {expanded ? (
@@ -1110,6 +1078,7 @@ function RequestTagAccordion({
                 active={selected}
                 onPress={() => onToggleTag(tag)}
                 onRemove={() => onDeleteTag(tag)}
+                removeAccessibilityLabel={t('recommendations.deleteTag', { tag })}
               />
             );
           })}
@@ -1122,45 +1091,29 @@ function RequestTagAccordion({
 function RequestTagPill({
   label,
   active = false,
-  compact = false,
   onPress,
   onRemove,
+  removeAccessibilityLabel,
 }: {
   label: string;
   active?: boolean;
-  compact?: boolean;
   onPress?: () => void;
   onRemove?: () => void;
+  removeAccessibilityLabel?: string;
 }) {
-  const content = (
-    <>
-      <Text style={[styles.requestTagText, active && styles.requestTagTextActive]}>{label}</Text>
-      {onRemove ? (
-        <Pressable accessibilityRole="button" onPress={onRemove} style={styles.requestTagRemove}>
-          <Text style={styles.requestTagRemoveText}>x</Text>
-        </Pressable>
-      ) : null}
-    </>
-  );
-
-  if (onPress) {
+  if (onRemove && removeAccessibilityLabel) {
     return (
-      <Pressable
-        accessibilityRole="button"
+      <IngredientChip
+        label={label}
+        selected={active}
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.requestTagPill,
-          compact && styles.requestTagPillCompact,
-          active && styles.requestTagPillActive,
-          pressed && styles.textActionPressed,
-        ]}
-      >
-        {content}
-      </Pressable>
+        onRemove={onRemove}
+        removeAccessibilityLabel={removeAccessibilityLabel}
+      />
     );
   }
 
-  return <View style={[styles.requestTagPill, compact && styles.requestTagPillCompact, active && styles.requestTagPillActive]}>{content}</View>;
+  return <IngredientChip label={label} selected={active} onPress={onPress} />;
 }
 
 async function refineWithRetry(task: () => Promise<RefinedRagRecommendation[]>, t: TFunction) {
@@ -1452,10 +1405,16 @@ function formatBytes(bytes: number) {
   return `${bytes} B`;
 }
 
-const styles = StyleSheet.create({
+function useRecommendationStyles() {
+  const { colors: appColors } = useAppTheme();
+  return useMemo(() => createStyles(appColors), [appColors]);
+}
+
+function createStyles(appColors: AppColorTokens) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.canvas,
   },
   loadingScreen: {
     flex: 1,
@@ -1473,9 +1432,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: appColors.border,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
@@ -1494,8 +1453,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   minimalCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surface,
+    borderColor: appColors.border,
     borderRadius: 12,
     shadowOpacity: 0,
     elevation: 0,
@@ -1515,84 +1474,49 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   readinessTitle: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 18,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   readinessDetail: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
   readinessList: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: appColors.border,
   },
   readinessRow: {
     minHeight: 48,
+    minWidth: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: appColors.border,
   },
   readinessRowPressed: {
     opacity: 0.68,
   },
   readinessLabel: {
     flex: 1,
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 15,
     fontWeight: '600',
     fontFamily: typography.strong,
   },
   readinessLabelReady: {
-    color: colors.primary,
+    color: appColors.primary,
   },
   readinessStatus: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontSize: 13,
   },
-  actionButton: {
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#1B4332',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButtonSecondary: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
-    borderWidth: 1,
-  },
-  actionButtonDestructive: {
-    backgroundColor: '#E07A5F',
-  },
-  actionButtonDisabled: {
-    opacity: 0.46,
-  },
-  actionButtonPressed: {
-    opacity: 0.88,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: typography.strong,
-  },
-  actionButtonTextSecondary: {
-    color: '#1B4332',
-  },
-  actionButtonTextDisabled: {
-    color: '#6B6B6B',
-  },
   textAction: {
-    minHeight: 44,
+    minHeight: 48,
+    minWidth: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
@@ -1605,71 +1529,30 @@ const styles = StyleSheet.create({
     opacity: 0.46,
   },
   textActionLabel: {
-    color: '#1B4332',
+    color: appColors.primary,
     fontSize: 15,
     fontWeight: '600',
-    fontFamily: typography.strong,
-  },
-  requestTagPill: {
-    minHeight: 36,
-    borderRadius: radii.pill,
-    borderColor: '#E5E5E5',
-    borderWidth: 1,
-    backgroundColor: '#F5F7F5',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  requestTagPillCompact: {
-    minHeight: 30,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  requestTagPillActive: {
-    borderColor: '#1B4332',
-  },
-  requestTagText: {
-    color: '#1A1A1A',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: typography.strong,
-  },
-  requestTagTextActive: {
-    color: '#1B4332',
-  },
-  requestTagRemove: {
-    minWidth: 24,
-    minHeight: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  requestTagRemoveText: {
-    color: '#6B6B6B',
-    fontWeight: '700',
     fontFamily: typography.strong,
   },
   requestHeader: {
     gap: 4,
   },
   requestTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     fontFamily: typography.strong,
   },
   requestHelperText: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
   selectedRequestArea: {
     gap: spacing.sm,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: appColors.border,
     paddingBottom: spacing.sm,
   },
   selectedRequestHeader: {
@@ -1679,7 +1562,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   selectedRequestLabel: {
-    color: '#6B6B6B',
+    color: appColors.textSecondary,
     fontSize: 12,
     fontWeight: '600',
     fontFamily: typography.strong,
@@ -1691,22 +1574,23 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   clearRequestLink: {
-    minHeight: 32,
+    minHeight: 48,
+    minWidth: 48,
     justifyContent: 'center',
   },
   clearRequestText: {
-    color: '#1B4332',
+    color: appColors.primary,
     fontSize: 14,
     fontWeight: '500',
     fontFamily: typography.strong,
   },
   requestAccordionList: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: appColors.border,
   },
   requestAccordionSection: {
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: appColors.border,
   },
   requestAccordionHeader: {
     minHeight: 52,
@@ -1716,7 +1600,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   requestAccordionTitle: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     fontFamily: typography.strong,
@@ -1730,8 +1614,8 @@ const styles = StyleSheet.create({
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#F5F7F5',
-    color: '#1B4332',
+    backgroundColor: appColors.surfaceMuted,
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 22,
@@ -1762,17 +1646,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   noticeText: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 21,
     fontFamily: typography.body,
   },
   refineText: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 21,
     fontWeight: '700',
   },
   historyText: {
-    color: colors.primary,
+    color: appColors.primary,
     lineHeight: 21,
     fontWeight: '900',
   },
@@ -1786,20 +1670,20 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   emptyTitle: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 20,
     fontWeight: '900',
     fontFamily: typography.display,
   },
   emptyText: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 22,
   },
   card: {
     gap: spacing.md,
   },
   highlightedCard: {
-    borderColor: colors.primary,
+    borderColor: appColors.primary,
     borderWidth: 2,
   },
   cardHeader: {
@@ -1813,7 +1697,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   recipeTitle: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 21,
     fontWeight: '900',
     fontFamily: typography.strong,
@@ -1824,11 +1708,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   metaPill: {
-    backgroundColor: '#F5F7F5',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surfaceMuted,
+    borderColor: appColors.border,
     borderWidth: 1,
     borderRadius: radii.pill,
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontWeight: '800',
@@ -1839,63 +1723,63 @@ const styles = StyleSheet.create({
   },
   ingredientPanel: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surfaceRaised,
+    borderColor: appColors.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
   },
   panelLabel: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontSize: 12,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   panelValue: {
-    color: colors.text,
+    color: appColors.textPrimary,
     lineHeight: 20,
     fontWeight: '800',
   },
   reasonBox: {
     gap: spacing.xs,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surfaceRaised,
+    borderColor: appColors.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: spacing.md,
   },
   reasonLabel: {
-    color: colors.primary,
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: '900',
     fontFamily: typography.strong,
     letterSpacing: 0.6,
   },
   reason: {
-    color: colors.text,
+    color: appColors.textPrimary,
     lineHeight: 23,
     fontSize: 15,
   },
   line: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 21,
   },
   sourceLine: {
-    color: colors.muted,
+    color: appColors.textTertiary,
     lineHeight: 19,
     fontWeight: '800',
   },
   stepsBox: {
     gap: spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surfaceRaised,
+    borderColor: appColors.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: spacing.md,
   },
   stepsTitle: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
@@ -1908,8 +1792,8 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.surface,
-    color: colors.primary,
+    backgroundColor: appColors.surfaceMuted,
+    color: appColors.primary,
     textAlign: 'center',
     lineHeight: 24,
     fontWeight: '900',
@@ -1917,11 +1801,11 @@ const styles = StyleSheet.create({
   },
   stepLine: {
     flex: 1,
-    color: colors.text,
+    color: appColors.textPrimary,
     lineHeight: 22,
   },
   notes: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 21,
     fontStyle: 'italic',
   },
@@ -1936,18 +1820,20 @@ const styles = StyleSheet.create({
   },
   dismissButton: {
     minHeight: 48,
+    minWidth: 48,
     borderRadius: 12,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dismissButtonText: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
-});
+  });
+}

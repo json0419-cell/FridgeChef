@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -9,13 +8,12 @@ import {
   StyleSheet,
   Text,
   View,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../shared/components/AppLayout';
+import { Button as ActionButton } from '../../../shared/components/Foundation';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { testProviderConnection } from '../../../ai/providerAdapter';
@@ -29,11 +27,10 @@ import {
   saveApiKey,
   saveSettings,
 } from '../../../storage/settingsStorage';
-import { colors, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
+import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../../../types';
 
 type Props = SettingsScreenProps;
-type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 const GEMINI_API_KEY_URL = 'https://aistudio.google.com/app/apikey';
 const CREDENTIAL_SCREEN_CAPTURE_KEY = 'gemini-api-key-settings';
 
@@ -56,6 +53,7 @@ export function SettingsScreen({ navigation }: Props) {
   );
   const { language, languagePreference, setLanguagePreference, t } = useI18n();
   const { colors: appColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(appColors), [appColors]);
   const { showFeedback } = useFeedback();
   const [servings, setServings] = useState('2');
   const [dietaryPreferences, setDietaryPreferences] = useState('');
@@ -384,47 +382,6 @@ export function SettingsScreen({ navigation }: Props) {
   );
 }
 
-function ActionButton({
-  title,
-  onPress,
-  variant = 'primary',
-  disabled = false,
-  loading = false,
-  style,
-}: {
-  title: string;
-  onPress: () => void;
-  variant?: ActionButtonVariant;
-  disabled?: boolean;
-  loading?: boolean;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const inactive = disabled || loading;
-  const secondary = variant === 'secondary';
-  const destructive = variant === 'destructive';
-  const spinnerColor = secondary ? '#1B4332' : '#FFFFFF';
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: loading }}
-      disabled={inactive}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        secondary && styles.actionButtonSecondary,
-        destructive && styles.actionButtonDestructive,
-        inactive && styles.actionButtonDisabled,
-        pressed && !inactive && styles.actionButtonPressed,
-        style,
-      ]}
-    >
-      {loading ? <ActivityIndicator color={spinnerColor} size="small" /> : null}
-      <Text style={[styles.actionButtonText, secondary && styles.actionButtonTextSecondary, inactive && styles.actionButtonTextDisabled]}>{title}</Text>
-    </Pressable>
-  );
-}
-
 function languagePreferenceLabel(
   value: LanguagePreference,
   t: ReturnType<typeof useI18n>['t'],
@@ -474,10 +431,11 @@ function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
   return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
 }
 
-const styles = StyleSheet.create({
+function createStyles(appColors: AppColorTokens) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.canvas,
   },
   flex: {
     flex: 1,
@@ -490,45 +448,9 @@ const styles = StyleSheet.create({
     zIndex: 30,
     elevation: 30,
   },
-  actionButton: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#1B4332',
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButtonSecondary: {
-    backgroundColor: 'transparent',
-    borderColor: '#1B4332',
-    borderWidth: 1,
-  },
-  actionButtonDestructive: {
-    backgroundColor: '#E07A5F',
-  },
-  actionButtonDisabled: {
-    opacity: 0.46,
-  },
-  actionButtonPressed: {
-    opacity: 0.88,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '500',
-    fontFamily: typography.strong,
-  },
-  actionButtonTextSecondary: {
-    color: '#1B4332',
-  },
-  actionButtonTextDisabled: {
-    color: '#6B6B6B',
-  },
   minimalCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5E5',
+    backgroundColor: appColors.surface,
+    borderColor: appColors.border,
     borderRadius: 12,
     shadowOpacity: 0,
     elevation: 0,
@@ -536,9 +458,9 @@ const styles = StyleSheet.create({
   input: {
     height: 48,
     minHeight: 48,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderRadius: 10,
     paddingHorizontal: 16,
     fontSize: 16,
@@ -551,9 +473,9 @@ const styles = StyleSheet.create({
   dropdownButton: {
     minHeight: 52,
     borderRadius: 10,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surface,
     paddingHorizontal: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -563,13 +485,13 @@ const styles = StyleSheet.create({
     opacity: 0.86,
   },
   dropdownButtonText: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 16,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   dropdownCaret: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     fontSize: 16,
     fontWeight: '900',
     fontFamily: typography.strong,
@@ -583,46 +505,49 @@ const styles = StyleSheet.create({
     elevation: 50,
     overflow: 'hidden',
     borderRadius: 10,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.surfaceRaised,
   },
   dropdownOption: {
     minHeight: 48,
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
-    borderBottomColor: colors.border,
+    borderBottomColor: appColors.border,
     borderBottomWidth: 1,
   },
   dropdownOptionActive: {
-    backgroundColor: '#F5F7F5',
+    backgroundColor: appColors.surfacePressed,
   },
   dropdownOptionPressed: {
     opacity: 0.88,
   },
   dropdownOptionText: {
-    color: colors.text,
+    color: appColors.textPrimary,
     fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
   },
   dropdownOptionTextActive: {
-    color: '#1B4332',
+    color: appColors.primary,
   },
   helper: {
-    color: colors.muted,
+    color: appColors.textSecondary,
     lineHeight: 20,
     fontWeight: '700',
   },
   apiKeyHelpLink: {
     alignSelf: 'flex-start',
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
     paddingVertical: spacing.xs,
   },
   apiKeyHelpLinkPressed: {
     opacity: 0.72,
   },
   apiKeyHelpLinkText: {
-    color: colors.primary,
+    color: appColors.primary,
     fontSize: 15,
     fontWeight: '900',
     fontFamily: typography.strong,
@@ -644,30 +569,32 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   choiceChip: {
-    height: 32,
+    minHeight: 48,
+    minWidth: 48,
     borderRadius: 10,
-    borderColor: '#E5E5E5',
+    borderColor: appColors.border,
     borderWidth: 1,
-    backgroundColor: '#F5F7F5',
+    backgroundColor: appColors.surfaceMuted,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   choiceChipActive: {
-    backgroundColor: '#1B4332',
-    borderColor: '#1B4332',
+    backgroundColor: appColors.primary,
+    borderColor: appColors.primary,
   },
   choiceChipText: {
-    color: '#1A1A1A',
+    color: appColors.textPrimary,
     fontWeight: '600',
     fontFamily: typography.strong,
   },
   choiceChipTextActive: {
-    color: '#FFFFFF',
+    color: appColors.onPrimary,
   },
   multilineInput: {
     height: 104,
     minHeight: 104,
     lineHeight: 22,
   },
-});
+  });
+}
