@@ -26,7 +26,7 @@ Branch commits from before the sub-issues, which Phase 1 audited rather than rep
 
 - Target: Android emulator, Google APIs Play Store system image, Android 17 (API 37), x86_64, 1080×2400 at 420 dpi (1 dp = 2.625 px)
 - Build: the development build (`npm run android`) of the reviewed commit, with JavaScript served by Metro. No native dependencies changed after that APK was built (later `package.json` changes are test-only devDependencies).
-- App state: no Gemini API key, no AI data consent, and BGE-M3 not verified. The official recipe source is enabled. Screenshots after section 3.3 have one generic test ingredient ("eggs", quantity 1).
+- App state: no Gemini API key, no AI data consent, and BGE-M3 not verified. A recipe source is available (the readiness row reports `Ready`). Screenshots named `*-with-ingredient*` and the setup dialog show one synthetic Confirmed Ingredient ("eggs", quantity 1).
 - Date: 2026-09-16
 
 ## 3. Screenshots
@@ -58,7 +58,7 @@ The loading, error, cached and populated states need a live Gemini key, and this
 | State | Screenshot |
 | --- | --- |
 | One Confirmed Ingredient: "View fridge · 1 ingredient" | [en light](screenshots/en-light-home-with-ingredient.png) |
-| Get recipe recommendations with setup incomplete: "A few steps remain" | [en light](screenshots/en-light-home-setup-dialog.png) |
+| Get recipe recommendations while not Recommendation Ready: "A few steps remain" | [en light](screenshots/en-light-home-setup-dialog.png) |
 | Empty fridge dialog at 200% | [en light](screenshots/en-light-home-dialog-font200.png) |
 | Home at 200% | [en light](screenshots/en-light-home-font200.png) |
 | Fridge and My at 200% | [Fridge dark](screenshots/en-dark-fridge-font200.png), [My dark](screenshots/en-dark-my-font200.png) |
@@ -109,8 +109,8 @@ The checks follow [`docs/accessibility-phase1-checks.md`](../accessibility-phase
 | R2 | Phase 1 regression | At 200% the Recommendations header title is cut off with an ellipsis (`Recipe Recommendatio…`) instead of wrapping. | English, font scale 2.0, open Recommendations. See `en-light-recommendations-font200.png`. |
 | R3 | Phase 1 regression | The Fridge header Settings button is 36 dp wide on screen. `minWidth: 48` with `marginRight: -12` in `FridgeScreen.tsx` (`headerSettingsButton`, from `b566b6c`) is clipped by the native header container. | Open Fridge and inspect the node bounds of `Settings`: `[943,73][1038,199]` px at 420 dpi. |
 | P1 | Pre-existing issue | The quantity field on Add Ingredient exposes its placeholder `4` as its accessibility description, not the visible `Quantity` label. | Fridge → Add manually, then inspect the node tree. |
-| L1 | Out-of-scope limitation | No device screenshots of the loading, error, cached or populated Recommendations states. They need a live Gemini key, and completing Recommendation Ready setup is out of scope for #3. Rendered tests cover these states. | — |
-| L2 | Out-of-scope limitation | No full TalkBack gesture walk-through with speech. TalkBack on the emulator ignores injected `adb` swipes and keyboard shortcuts, so this needs a person on a physical device or emulator. | Enable TalkBack, then run `adb shell input swipe …`: focus does not move. |
+| L1 | Out-of-scope limitation | No device screenshots of the loading, error, cached or populated Recommendations states. They need a live Gemini key, and completing Recommendation Ready is out of scope for #3 (ADR-0003: generating needs Gemini and BGE-M3). Rendered tests cover these states. | — |
+| L2 | Out-of-scope limitation | No full TalkBack gesture walk-through with speech. TalkBack on the emulator ignores injected `adb` swipes and keyboard shortcuts, so this needs a person on a physical device or emulator. It is a verification gap, not an observed failure; the product owner may require it before approval. | Enable TalkBack, then run `adb shell input swipe …`: focus does not move. |
 
 ## 7. Privacy check
 
