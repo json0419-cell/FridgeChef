@@ -89,12 +89,12 @@ export function HomeScreen({ navigation }: Props) {
       setPrompt('inventoryError');
       return;
     }
-    if (!setupReady) {
-      setPrompt('setup');
-      return;
-    }
     if (snapshot.ingredients.length === 0) {
       setPrompt('fridge');
+      return;
+    }
+    if (!setupReady) {
+      setPrompt('setup');
       return;
     }
 
@@ -331,6 +331,7 @@ function getPromptCopy(prompt: HomePrompt, missingSetup: string[], t: ReturnType
 }
 
 function getFridgeButtonLabel(count: number, t: ReturnType<typeof useI18n>['t']) {
+  if (count === 1) return t('home.fridgeWithOne');
   return count > 0 ? t('home.fridgeWithCount', { count }) : t('home.fridgeEmptyAction');
 }
 
