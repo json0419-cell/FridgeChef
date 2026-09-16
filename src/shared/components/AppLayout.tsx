@@ -19,7 +19,7 @@ import {
   type AppColorTokens,
   useAppTheme,
 } from '../theme/theme';
-import { getSelectableAccessibilityState } from './control-state';
+import { IngredientChip, StatusBadge } from './Foundation';
 
 interface AppHeroProps {
   eyebrow?: string;
@@ -151,46 +151,30 @@ export function Chip({
   onRemove,
   removeAccessibilityLabel,
 }: ChipProps) {
-  const styles = useAppLayoutStyles();
-  const [focused, setFocused] = useState(false);
-  const content = (
-    <>
-      <Text style={[styles.chipText, (active || tone === 'dark' || tone === 'danger') && styles.chipTextInverse]}>{label}</Text>
-      {onRemove ? (
-        <Pressable accessibilityLabel={removeAccessibilityLabel} accessibilityRole="button" onPress={onRemove} style={styles.chipRemove}>
-          <Text style={[styles.chipRemoveText, active && styles.chipTextInverse]}>x</Text>
-        </Pressable>
-      ) : null}
-    </>
-  );
-
-  if (onPress) {
+  if (onRemove) {
     return (
-      <Pressable
-        accessibilityLabel={label}
-        accessibilityRole="button"
-        accessibilityState={getSelectableAccessibilityState({ selected: active })}
-        onBlur={() => setFocused(false)}
-        onFocus={() => setFocused(true)}
+      <IngredientChip
+        label={label}
+        selected={active}
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.chip,
-          styles[`${tone}Chip`],
-          active && styles.activeChip,
-          focused && styles.focused,
-          pressed && styles.pressed,
-        ]}
-      >
-        {content}
-      </Pressable>
+        onRemove={onRemove}
+        removeAccessibilityLabel={removeAccessibilityLabel}
+      />
     );
   }
 
-  return (
-    <View style={[styles.chip, styles[`${tone}Chip`], active && styles.activeChip]}>
-      {content}
-    </View>
-  );
+  if (onPress) {
+    return <IngredientChip label={label} selected={active} onPress={onPress} />;
+  }
+
+  return <StatusBadge label={label} tone={getChipTone(tone, active)} />;
+}
+
+function getChipTone(tone: ChipBaseProps['tone'], active: boolean) {
+  if (tone === 'danger') return 'danger' as const;
+  if (tone === 'gold') return 'warning' as const;
+  if (tone === 'primary' || active) return 'success' as const;
+  return 'neutral' as const;
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {
@@ -367,60 +351,6 @@ function createAppLayoutStyles(colors: AppColorTokens) {
   metricLabel: {
     color: colors.textSecondary,
     fontWeight: '800',
-    fontFamily: typography.strong,
-  },
-  chip: {
-    minHeight: buttonHeights.md,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  neutralChip: {},
-  primaryChip: {
-    backgroundColor: colors.primaryMuted,
-    borderColor: colors.primary,
-  },
-  dangerChip: {
-    backgroundColor: colors.danger,
-    borderColor: colors.danger,
-  },
-  goldChip: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  darkChip: {
-    backgroundColor: colors.primaryPressed,
-    borderColor: colors.primaryPressed,
-  },
-  activeChip: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-  },
-  chipTextInverse: {
-    color: colors.onPrimary,
-  },
-  chipRemove: {
-    minWidth: buttonHeights.md,
-    minHeight: buttonHeights.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipRemoveText: {
-    color: colors.textSecondary,
-    fontWeight: '900',
     fontFamily: typography.strong,
   },
   fieldLabel: {

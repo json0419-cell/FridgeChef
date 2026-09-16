@@ -29,7 +29,7 @@ import {
   saveApiKey,
   saveSettings,
 } from '../../../storage/settingsStorage';
-import { colors, spacing, typography } from '../../../shared/theme/theme';
+import { colors, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
 import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../../../types';
 
 type Props = SettingsScreenProps;
@@ -55,6 +55,7 @@ export function SettingsScreen({ navigation }: Props) {
     }, []),
   );
   const { language, languagePreference, setLanguagePreference, t } = useI18n();
+  const { colors: appColors } = useAppTheme();
   const { showFeedback } = useFeedback();
   const [servings, setServings] = useState('2');
   const [dietaryPreferences, setDietaryPreferences] = useState('');
@@ -72,16 +73,16 @@ export function SettingsScreen({ navigation }: Props) {
 
   useEffect(() => {
     navigation.setOptions({
-      headerStyle: { backgroundColor: '#FFFFFF' },
+      headerStyle: { backgroundColor: appColors.surface },
       headerShadowVisible: false,
-      headerTintColor: '#1A1A1A',
+      headerTintColor: appColors.textPrimary,
       headerTitleStyle: {
-        color: '#1A1A1A',
+        color: appColors.textPrimary,
         fontSize: 20,
         fontWeight: '700',
       },
     });
-  }, [navigation]);
+  }, [appColors, navigation]);
 
   useEffect(() => {
     void loadSettings();
@@ -230,7 +231,7 @@ export function SettingsScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <AppCard style={[styles.minimalCard, styles.languageSection]}>

@@ -15,7 +15,7 @@ import { getRagRecommendations, type RagResult } from '../../../rag/ragService';
 import { loadRecommendationCache, saveRecommendationCache } from '../../../storage/recommendationCacheStorage';
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../../../storage/recommendationTagStorage';
 import { getApiKey, getSettings } from '../../../storage/settingsStorage';
-import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { colors, radii, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
 import { classifyRecommendationCache } from '../recommendation-cache-policy';
 import {
   getRecommendationInputSnapshot,
@@ -100,6 +100,7 @@ const REQUEST_TAGS_EN = [
 
 export function RecommendationsScreen({ navigation, route }: Props) {
   const { language, t } = useI18n();
+  const { colors: appColors } = useAppTheme();
   const { showFeedback } = useFeedback();
   const insets = useSafeAreaInsets();
   const [refinedRecommendations, setRefinedRecommendations] = useState<RefinedRagRecommendation[]>([]);
@@ -135,16 +136,16 @@ export function RecommendationsScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     navigation.setOptions({
-      headerStyle: { backgroundColor: '#FFFFFF' },
+      headerStyle: { backgroundColor: appColors.surface },
       headerShadowVisible: false,
-      headerTintColor: '#1A1A1A',
+      headerTintColor: appColors.textPrimary,
       headerTitleStyle: {
-        color: '#1A1A1A',
+        color: appColors.textPrimary,
         fontSize: 20,
         fontWeight: '700',
       },
     });
-  }, [navigation]);
+  }, [appColors, navigation]);
 
   const setRecommendationRequest = (value: string) => {
     recommendationRequestRef.current = value;
@@ -689,7 +690,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
 
   if (loading && !hasLoadedOnce) {
     return (
-      <SafeAreaView style={styles.screen}>
+      <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
         <View style={styles.loadingScreen}>
           <ActivityIndicator color="#1B4332" size="large" />
           <Text style={styles.emptyTitle}>{t('recommendations.loadingTitle')}</Text>
@@ -700,7 +701,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
       <FlatList
         ref={listRef}
         data={listData}

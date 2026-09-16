@@ -6,7 +6,7 @@ import { Apple, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIngredientInventory } from '../hooks/useIngredientInventory';
 import { useI18n } from '../../../i18n/i18n';
-import { colors, spacing, typography } from '../../../shared/theme/theme';
+import { colors, spacing, typography, useAppTheme } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, Ingredient } from '../../../types';
 
 type Props = FridgeStackScreenProps<'Fridge'>;
@@ -14,6 +14,7 @@ type ActionButtonVariant = 'primary' | 'secondary';
 
 export function FridgeScreen({ navigation }: Props) {
   const { language, t } = useI18n();
+  const { colors: appColors } = useAppTheme();
   const tabBarHeight = useBottomTabBarHeight();
   const { ingredients, loading, loadError, deleteError, loadIngredients, deleteInventoryIngredient } = useIngredientInventory();
 
@@ -50,7 +51,7 @@ export function FridgeScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: appColors.canvas }]}>
       <FlatList
         data={ingredients}
         keyExtractor={(item) => item.id}

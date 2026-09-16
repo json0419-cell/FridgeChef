@@ -349,24 +349,56 @@ export function IngredientChip({
 }: IngredientChipProps) {
   const styles = useFoundationStyles();
   const [focused, setFocused] = useState(false);
+  const [removeFocused, setRemoveFocused] = useState(false);
   const content = (
     <>
       <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
       {quantity ? <Text style={[styles.chipMeta, selected && styles.chipMetaSelected]}>{unit ? `${quantity} ${unit}` : quantity}</Text> : null}
-      {onRemove ? (
+    </>
+  );
+
+  if (onRemove) {
+    return (
+      <View style={[styles.chip, selected && styles.chipSelected, disabled && styles.chipDisabled]}>
+        {onPress ? (
+          <Pressable
+            accessibilityLabel={label}
+            accessibilityRole="button"
+            accessibilityState={getSelectableAccessibilityState({ selected, disabled })}
+            disabled={disabled}
+            onBlur={() => setFocused(false)}
+            onFocus={() => setFocused(true)}
+            onPress={onPress}
+            style={({ pressed }) => [
+              styles.chipMainAction,
+              focused && !disabled && styles.controlFocused,
+              pressed && !disabled && styles.buttonPressed,
+            ]}
+          >
+            {content}
+          </Pressable>
+        ) : (
+          <View style={styles.chipMainAction}>{content}</View>
+        )}
         <Pressable
           accessibilityLabel={removeAccessibilityLabel}
           accessibilityRole="button"
           accessibilityState={getActionAccessibilityState({ disabled })}
           disabled={disabled}
+          onBlur={() => setRemoveFocused(false)}
+          onFocus={() => setRemoveFocused(true)}
           onPress={onRemove}
-          style={styles.chipRemove}
+          style={({ pressed }) => [
+            styles.chipRemove,
+            removeFocused && !disabled && styles.controlFocused,
+            pressed && !disabled && styles.buttonPressed,
+          ]}
         >
           <Text style={[styles.chipRemoveText, selected && styles.chipLabelSelected]}>x</Text>
         </Pressable>
-      ) : null}
-    </>
-  );
+      </View>
+    );
+  }
 
   if (onPress) {
     return (
@@ -747,6 +779,14 @@ function createFoundationStyles(colors: AppColorTokens) {
     minHeight: buttonHeights.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chipMainAction: {
+    minHeight: buttonHeights.md,
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   chipRemoveText: {
     ...typeScale.label,

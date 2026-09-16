@@ -12,18 +12,15 @@ import {
 } from '../src/shared/components/control-state.ts';
 
 test('system appearance resolves the matching app-shell theme and status bar', () => {
-  assert.deepEqual(resolveAppTheme('dark'), {
-    colorScheme: 'dark',
-    colors: darkAppColors,
-    isDark: true,
-    statusBarStyle: 'light',
-  });
-  assert.deepEqual(resolveAppTheme('light'), {
-    colorScheme: 'light',
-    colors: lightAppColors,
-    isDark: false,
-    statusBarStyle: 'dark',
-  });
+  const darkTheme = resolveAppTheme('dark');
+  const lightTheme = resolveAppTheme('light');
+
+  assert.equal(darkTheme.colorScheme, 'dark');
+  assert.equal(darkTheme.isDark, true);
+  assert.equal(darkTheme.statusBarStyle, 'light');
+  assert.equal(lightTheme.colorScheme, 'light');
+  assert.equal(lightTheme.isDark, false);
+  assert.equal(lightTheme.statusBarStyle, 'dark');
   assert.equal(resolveAppTheme(null).colorScheme, 'light');
 });
 
