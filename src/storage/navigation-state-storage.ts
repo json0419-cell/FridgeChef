@@ -1,10 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { InitialState, NavigationState } from '@react-navigation/native';
+import type { RecommendationsStackParamList } from '../types';
 
 export const NAVIGATION_STATE_STORAGE_KEY = 'fridgechef.navigation-state.v1';
 
 const NAVIGATION_STATE_VERSION = 1;
-const TRANSIENT_ROUTE_PARAMS = new Set(['focusRecommendationId', 'generationRequestId']);
+type TransientRouteParam = keyof NonNullable<RecommendationsStackParamList['Recommendations']>;
+
+const TRANSIENT_ROUTE_PARAMS: ReadonlySet<string> = new Set<TransientRouteParam>([
+  'focusRecommendationId',
+  'generationRequestId',
+]);
 
 type PersistedRoute = {
   name: string;

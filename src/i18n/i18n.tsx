@@ -621,7 +621,7 @@ const en: Record<TranslationKey, string> = {
   'nav.addIngredient': 'Add / Scan Ingredients',
   'nav.confirmRecognizedFood': 'Confirm Ingredients',
   'nav.recommendations': 'Recipe Recommendations',
-  'nav.recommendationIdeas': 'Ideas',
+  'nav.recommendationIdeas': 'Recommendations',
   'nav.recipeDetail': 'Recipe Detail',
   'nav.history': 'History',
   'nav.settings': 'Settings',

@@ -44,11 +44,15 @@ const FridgeStack = createNativeStackNavigator<FridgeStackParamList>();
 const RecommendationsStack = createNativeStackNavigator<RecommendationsStackParamList>();
 const MyStack = createNativeStackNavigator<MyStackParamList>();
 
-const TAB_ICONS = {
-  HomeStack: House,
-  FridgeStack: Refrigerator,
-  RecommendationsStack: Sparkles,
-  MyStack: UserRound,
+const TAB_CONFIG = {
+  HomeStack: { Icon: House, accessibilityLabelKey: 'nav.home', visibleLabelKey: 'nav.home' },
+  FridgeStack: { Icon: Refrigerator, accessibilityLabelKey: 'nav.fridge', visibleLabelKey: 'nav.fridge' },
+  RecommendationsStack: {
+    Icon: Sparkles,
+    accessibilityLabelKey: 'nav.recommendations',
+    visibleLabelKey: 'nav.recommendationIdeas',
+  },
+  MyStack: { Icon: UserRound, accessibilityLabelKey: 'nav.my', visibleLabelKey: 'nav.my' },
 } as const;
 
 type StartupState =
@@ -202,41 +206,32 @@ function MainTabsNavigator() {
   const { colors } = useAppTheme();
   const { fontScale } = useWindowDimensions();
   const accessibleFontScale = Math.min(Math.max(fontScale, 1), 2);
-  const tabBarHeight = 72 + Math.ceil((accessibleFontScale - 1) * 32);
+  const tabBarHeight = 72 + Math.ceil((accessibleFontScale - 1) * 64);
 
   return (
     <Tab.Navigator
       initialRouteName="HomeStack"
       backBehavior="initialRoute"
       screenOptions={({ route }) => {
-        const Icon = TAB_ICONS[route.name];
+        const { Icon, accessibilityLabelKey, visibleLabelKey } = TAB_CONFIG[route.name];
 
         return {
           headerShown: false,
           sceneStyle: { backgroundColor: colors.canvas },
           tabBarActiveTintColor: colors.primary,
-          tabBarAccessibilityLabel:
-            route.name === 'RecommendationsStack'
-              ? t('nav.recommendations')
-              : t(
-                  route.name === 'HomeStack'
-                    ? 'nav.home'
-                    : route.name === 'FridgeStack'
-                      ? 'nav.fridge'
-                      : 'nav.my',
-                ),
-          tabBarInactiveTintColor: colors.textTertiary,
+          tabBarAccessibilityLabel: t(accessibilityLabelKey),
+          tabBarInactiveTintColor: colors.textSecondary,
           tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size }) => <Icon color={color} size={Math.min(size, 23)} strokeWidth={2} />,
           tabBarItemStyle: { minHeight: tabBarHeight - 8, paddingVertical: 5 },
-          tabBarLabel: ({ color, children }) => (
+          tabBarLabel: ({ color }) => (
             <Text
               allowFontScaling
               maxFontSizeMultiplier={2}
-              numberOfLines={2}
+              numberOfLines={3}
               style={{ color, fontSize: 12, fontWeight: '600', lineHeight: 15, textAlign: 'center' }}
             >
-              {route.name === 'RecommendationsStack' ? t('nav.recommendationIdeas') : children}
+              {t(visibleLabelKey)}
             </Text>
           ),
           tabBarStyle: {
@@ -249,10 +244,10 @@ function MainTabsNavigator() {
         };
       }}
     >
-      <Tab.Screen name="HomeStack" component={HomeStackNavigator} options={{ title: t('nav.home') }} />
-      <Tab.Screen name="FridgeStack" component={FridgeStackNavigator} options={{ title: t('nav.fridge') }} />
-      <Tab.Screen name="RecommendationsStack" component={RecommendationsStackNavigator} options={{ title: t('nav.recommendations') }} />
-      <Tab.Screen name="MyStack" component={MyStackNavigator} options={{ title: t('nav.my') }} />
+      <Tab.Screen name="HomeStack" component={HomeStackNavigator} options={{ title: t(TAB_CONFIG.HomeStack.accessibilityLabelKey) }} />
+      <Tab.Screen name="FridgeStack" component={FridgeStackNavigator} options={{ title: t(TAB_CONFIG.FridgeStack.accessibilityLabelKey) }} />
+      <Tab.Screen name="RecommendationsStack" component={RecommendationsStackNavigator} options={{ title: t(TAB_CONFIG.RecommendationsStack.accessibilityLabelKey) }} />
+      <Tab.Screen name="MyStack" component={MyStackNavigator} options={{ title: t(TAB_CONFIG.MyStack.accessibilityLabelKey) }} />
     </Tab.Navigator>
   );
 }

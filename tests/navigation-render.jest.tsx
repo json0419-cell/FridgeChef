@@ -3,6 +3,8 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 import App from '../src/application/App';
 import { refineRagRecommendationsWithProvider } from '../src/ai/recommendationRefiner';
+import { getRagRecommendations } from '../src/rag/ragService';
+import { NAVIGATION_STATE_STORAGE_KEY } from '../src/storage/navigation-state-storage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -136,8 +138,6 @@ jest.mock('../src/features/recommendations/recommendation-readiness', () => ({
   })),
 }));
 
-const NAVIGATION_STORAGE_KEY = 'fridgechef.navigation-state.v1';
-
 describe('application navigation behavior', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -156,6 +156,7 @@ describe('application navigation behavior', () => {
       'Recipe Recommendations',
       'My',
     ]);
+    expect(screen.getByText('Recommendations')).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Fridge' }));
     await screen.findByText('Fridge destination');
@@ -170,7 +171,7 @@ describe('application navigation behavior', () => {
 
   it('passively restores Recommendations without replaying a generation request', async () => {
     await AsyncStorage.setItem(
-      NAVIGATION_STORAGE_KEY,
+      NAVIGATION_STATE_STORAGE_KEY,
       JSON.stringify({
         version: 1,
         state: {
@@ -208,6 +209,7 @@ describe('application navigation behavior', () => {
 
     await screen.findByText('Recommendation Ready');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Recipe Recommendations' }).props.accessibilityState).toEqual({ selected: true }));
+    expect(getRagRecommendations).not.toHaveBeenCalled();
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
   });
 
