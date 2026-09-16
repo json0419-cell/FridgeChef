@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppCard, AppTextInput, Chip } from '../../../shared/components/AppLayout';
+import { AppCard, AppTextInput } from '../../../shared/components/AppLayout';
+import { StatusBadge } from '../../../shared/components/Foundation';
 import { addIngredients } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { colors, spacing } from '../../../shared/theme/theme';
@@ -109,7 +110,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
         renderItem={({ item }) => (
           <AppCard style={styles.card}>
             <View style={styles.cardTop}>
-              <Chip label={item.category || t('confirm.uncategorized')} tone="primary" />
+              <StatusBadge label={item.category || t('confirm.uncategorized')} tone="success" />
               <Pressable accessibilityRole="button" onPress={() => removeItem(item.localId)}>
                 <Text style={styles.deleteText}>{t('common.delete')}</Text>
               </Pressable>

@@ -72,19 +72,6 @@ export function SettingsScreen({ navigation }: Props) {
   const hasUnsavedApiKey = apiKey.trim() !== savedApiKeyValue;
 
   useEffect(() => {
-    navigation.setOptions({
-      headerStyle: { backgroundColor: appColors.surface },
-      headerShadowVisible: false,
-      headerTintColor: appColors.textPrimary,
-      headerTitleStyle: {
-        color: appColors.textPrimary,
-        fontSize: 20,
-        fontWeight: '700',
-      },
-    });
-  }, [appColors, navigation]);
-
-  useEffect(() => {
     void loadSettings();
   }, []);
 

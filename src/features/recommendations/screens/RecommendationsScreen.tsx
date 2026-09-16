@@ -134,19 +134,6 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const handledGenerationRequestRef = useRef<string | null>(null);
   const listRef = useRef<FlatList<RecommendationListItem>>(null);
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerStyle: { backgroundColor: appColors.surface },
-      headerShadowVisible: false,
-      headerTintColor: appColors.textPrimary,
-      headerTitleStyle: {
-        color: appColors.textPrimary,
-        fontSize: 20,
-        fontWeight: '700',
-      },
-    });
-  }, [appColors, navigation]);
-
   const setRecommendationRequest = (value: string) => {
     recommendationRequestRef.current = value;
     setRecommendationRequestState(value);

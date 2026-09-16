@@ -19,7 +19,6 @@ import {
   type AppColorTokens,
   useAppTheme,
 } from '../theme/theme';
-import { IngredientChip, StatusBadge } from './Foundation';
 
 interface AppHeroProps {
   eyebrow?: string;
@@ -97,24 +96,6 @@ export function SectionHeader({ title, detail, actionLabel, onAction }: SectionH
   );
 }
 
-interface EmptyStateProps {
-  title: string;
-  text: string;
-  action?: ReactNode;
-}
-
-export function EmptyState({ title, text, action }: EmptyStateProps) {
-  const styles = useAppLayoutStyles();
-
-  return (
-    <AppCard style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyText}>{text}</Text>
-      {action}
-    </AppCard>
-  );
-}
-
 interface MetricPillProps {
   value: string;
   label: string;
@@ -129,52 +110,6 @@ export function MetricPill({ value, label }: MetricPillProps) {
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
-}
-
-interface ChipBaseProps {
-  label: string;
-  active?: boolean;
-  tone?: 'neutral' | 'primary' | 'danger' | 'gold' | 'dark';
-  onPress?: () => void;
-}
-
-type ChipProps = ChipBaseProps & (
-  | { onRemove?: undefined; removeAccessibilityLabel?: never }
-  | { onRemove: () => void; removeAccessibilityLabel: string }
-);
-
-export function Chip({
-  label,
-  active = false,
-  tone = 'neutral',
-  onPress,
-  onRemove,
-  removeAccessibilityLabel,
-}: ChipProps) {
-  if (onRemove) {
-    return (
-      <IngredientChip
-        label={label}
-        selected={active}
-        onPress={onPress}
-        onRemove={onRemove}
-        removeAccessibilityLabel={removeAccessibilityLabel}
-      />
-    );
-  }
-
-  if (onPress) {
-    return <IngredientChip label={label} selected={active} onPress={onPress} />;
-  }
-
-  return <StatusBadge label={label} tone={getChipTone(tone, active)} />;
-}
-
-function getChipTone(tone: ChipBaseProps['tone'], active: boolean) {
-  if (tone === 'danger') return 'danger' as const;
-  if (tone === 'gold') return 'warning' as const;
-  if (tone === 'primary' || active) return 'success' as const;
-  return 'neutral' as const;
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {
@@ -317,20 +252,6 @@ function createAppLayoutStyles(colors: AppColorTokens) {
     color: colors.primary,
     fontWeight: '900',
     fontFamily: typography.strong,
-  },
-  emptyState: {
-    padding: spacing.xl,
-  },
-  emptyTitle: {
-    color: colors.textPrimary,
-    fontSize: 21,
-    fontWeight: '900',
-    fontFamily: typography.display,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    lineHeight: 22,
-    fontFamily: typography.body,
   },
   metricPill: {
     flex: 1,

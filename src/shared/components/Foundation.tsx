@@ -426,50 +426,6 @@ export function IngredientChip({
   return <View style={[styles.chip, selected && styles.chipSelected, disabled && styles.chipDisabled]}>{content}</View>;
 }
 
-interface PreferenceChipBaseProps {
-  label: string;
-  selected?: boolean;
-  disabled?: boolean;
-  onPress?: () => void;
-}
-
-type PreferenceChipProps = PreferenceChipBaseProps & (
-  | { onRemove?: undefined; removeAccessibilityLabel?: never }
-  | { onRemove: () => void; removeAccessibilityLabel: string }
-);
-
-export function PreferenceChip({
-  label,
-  selected = false,
-  disabled = false,
-  onPress,
-  onRemove,
-  removeAccessibilityLabel,
-}: PreferenceChipProps) {
-  const sharedProps = {
-    label,
-    selected,
-    disabled,
-    onPress,
-  };
-
-  if (onRemove) {
-    return (
-      <IngredientChip
-        {...sharedProps}
-        onRemove={onRemove}
-        removeAccessibilityLabel={removeAccessibilityLabel}
-      />
-    );
-  }
-
-  return (
-    <IngredientChip
-      {...sharedProps}
-    />
-  );
-}
-
 type StatusBadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
 interface StatusBadgeProps {

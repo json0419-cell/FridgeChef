@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { PrimaryButton } from './PrimaryButton';
+import { Button } from './Foundation';
 import { spacing } from '../theme/theme';
 import { AppModalFrame } from './AppModalFrame';
 
@@ -36,10 +36,10 @@ export function AppConfirmModal({
       onRequestClose={onCancel}
     >
       <View style={styles.actions}>
-        <PrimaryButton title={cancelLabel} variant="secondary" onPress={onCancel} style={styles.actionButton} />
-        <PrimaryButton
+        <Button title={cancelLabel} variant="secondary" onPress={onCancel} style={styles.actionButton} />
+        <Button
           title={confirmLabel}
-          variant={tone === 'danger' ? 'danger' : 'primary'}
+          variant={tone === 'danger' ? 'destructive' : 'primary'}
           onPress={onConfirm}
           style={styles.actionButton}
         />
