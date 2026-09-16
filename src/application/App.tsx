@@ -3,9 +3,9 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, V
 import { StatusBar } from 'expo-status-bar';
 import { DarkTheme, DefaultTheme, NavigationContainer, type InitialState } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, type NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppFeedbackProvider, Button } from '../shared/components';
 import { initializeDatabase } from '../db/database';
 import {
@@ -206,7 +206,7 @@ function MainTabsNavigator() {
   const { colors } = useAppTheme();
   const { fontScale } = useWindowDimensions();
   const accessibleFontScale = Math.min(Math.max(fontScale, 1), 2);
-  const tabBarHeight = 72 + Math.ceil((accessibleFontScale - 1) * 64);
+  const tabBarHeight = 72 + Math.ceil((accessibleFontScale - 1) * 24);
 
   return (
     <Tab.Navigator
@@ -227,8 +227,10 @@ function MainTabsNavigator() {
           tabBarLabel: ({ color, focused }) => (
             <Text
               allowFontScaling
+              adjustsFontSizeToFit
               maxFontSizeMultiplier={2}
-              numberOfLines={3}
+              minimumFontScale={0.5}
+              numberOfLines={1}
               style={{ color, fontSize: 12, fontWeight: focused ? '900' : '600', lineHeight: 15, textAlign: 'center', textDecorationLine: focused ? 'underline' : 'none' }}
             >
               {t(visibleLabelKey)}
@@ -270,7 +272,7 @@ function FridgeStackNavigator() {
 
   return (
     <FridgeStack.Navigator initialRouteName="Fridge" screenOptions={createStackScreenOptions(colors)}>
-      <FridgeStack.Screen name="Fridge" component={FridgeScreen} options={{ title: t('nav.fridge') }} />
+      <FridgeStack.Screen name="Fridge" component={FridgeScreen} options={{ header: StackRootHeader, title: t('nav.fridge') }} />
       <FridgeStack.Screen name="AddIngredient" component={AddIngredientScreen} options={{ title: t('nav.addIngredient') }} />
       <FridgeStack.Screen
         name="ConfirmRecognizedFood"
@@ -290,7 +292,7 @@ function RecommendationsStackNavigator() {
       <RecommendationsStack.Screen
         name="Recommendations"
         component={RecommendationsScreen}
-        options={{ title: t('nav.recommendations') }}
+        options={{ header: StackRootHeader, title: t('nav.recommendations') }}
       />
       <RecommendationsStack.Screen name="RecipeDetail" component={RecipeDetailScreen} options={{ title: t('nav.recipeDetail') }} />
     </RecommendationsStack.Navigator>
@@ -318,6 +320,24 @@ function MyStackNavigator() {
   );
 }
 
+// The native Android toolbar truncates titles and clips header actions, so destination roots
+// render a header that wraps at large font sizes and keeps full-size action targets.
+function StackRootHeader({ options, route }: NativeStackHeaderProps) {
+  const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[stackRootHeaderStyles.container, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
+      <View style={stackRootHeaderStyles.row}>
+        <Text accessibilityRole="header" style={[stackRootHeaderStyles.title, { color: colors.textPrimary }]}>
+          {options.title ?? route.name}
+        </Text>
+        {options.headerRight?.({ canGoBack: false, tintColor: colors.textPrimary })}
+      </View>
+    </View>
+  );
+}
+
 function createStackScreenOptions(colors: AppColorTokens) {
   return {
     headerStyle: { backgroundColor: colors.surface },
@@ -328,6 +348,24 @@ function createStackScreenOptions(colors: AppColorTokens) {
     contentStyle: { backgroundColor: colors.canvas },
   };
 }
+
+const stackRootHeaderStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: spacing.lg,
+  },
+  row: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  title: {
+    flex: 1,
+    fontSize: 19,
+    fontWeight: '700',
+    paddingVertical: spacing.sm,
+  },
+});
 
 const startupStyles = StyleSheet.create({
   safeArea: {

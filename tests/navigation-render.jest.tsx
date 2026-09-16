@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 import App from '../src/application/App';
 import {
@@ -40,14 +40,24 @@ jest.mock('../src/db/database', () => ({ initializeDatabase: jest.fn(async () =>
 jest.mock('../src/features/ingredients', () => {
   const { Pressable, Text, View } = require('react-native');
   return {
-    FridgeScreen: ({ navigation }: { navigation: { navigate: (name: string) => void } }) => (
-      <View>
-        <Text>Fridge destination</Text>
-        <Pressable accessibilityRole="button" onPress={() => navigation.navigate('AddIngredient')}>
-          <Text>Open add ingredient</Text>
-        </Pressable>
-      </View>
-    ),
+    FridgeScreen: ({ navigation }: { navigation: { navigate: (name: string) => void; setOptions: (options: object) => void } }) => {
+      const React = require('react');
+      React.useEffect(() => {
+        navigation.setOptions({
+          headerRight: () => (
+            <Pressable accessibilityLabel="Fridge header action" accessibilityRole="button" onPress={() => undefined} />
+          ),
+        });
+      }, [navigation]);
+      return (
+        <View>
+          <Text>Fridge destination</Text>
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate('AddIngredient')}>
+            <Text>Open add ingredient</Text>
+          </Pressable>
+        </View>
+      );
+    },
     AddIngredientScreen: () => <Text>Add ingredient destination</Text>,
     ConfirmRecognizedFoodScreen: () => <Text>Confirm food destination</Text>,
   };
@@ -631,6 +641,31 @@ describe('application navigation behavior', () => {
       '菜谱推荐',
       '我的',
     ]);
+  });
+
+  it('keeps every visible tab label on one line so no word breaks at large font sizes', async () => {
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+
+    for (const label of ['Home', 'Fridge', 'Recommendations', 'My']) {
+      const text = screen.getByText(label);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.adjustsFontSizeToFit).toBe(true);
+    }
+  });
+
+  it('shows full top-level destination titles as wrapping headings with their header actions', async () => {
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
+    const recommendationsTitle = await screen.findByRole('header', { name: 'Recipe Recommendations' });
+    expect(recommendationsTitle.props.numberOfLines).toBeUndefined();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Fridge' }));
+    const fridgeTitle = await screen.findByRole('header', { name: 'Fridge' });
+    expect(fridgeTitle.props.numberOfLines).toBeUndefined();
+    expect(within(fridgeTitle.parent!).getByRole('button', { name: 'Fridge header action' })).toBeTruthy();
   });
 
   it('returns from another top-level destination to Home on Android back', async () => {

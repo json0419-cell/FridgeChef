@@ -22,7 +22,8 @@ Run every section in each combination:
 
 1. Launch the app. Swipe through the bottom tab bar.
    - Expect four tabs announced as `Home`, `Fridge`, `Recipe Recommendations`, `My` (or `首页`, `冰箱`, `菜谱推荐`, `我的`), each with “tab”/“selected” state.
-   - At 200%, labels wrap inside the bar and do not overlap icons or each other.
+   - At 200%, each label stays on one line (shrinking to fit rather than breaking a word) and does not overlap icons, each other, or the gesture bar.
+   - Fridge and Recommendations titles wrap instead of truncating, and the Fridge header Settings button is at least 48 × 48 dp.
    - The active tab is distinguishable without color: bold and underlined label.
 2. Activate each tab. Expect the screen title to be announced as a heading.
 
