@@ -7,7 +7,10 @@ import { CheckCircle2, ChevronDown, ChevronRight, Circle } from 'lucide-react-na
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
-import { refineRagRecommendationsWithProvider } from '../../../ai/recommendationRefiner';
+import {
+  RecommendationRefinerError,
+  refineRagRecommendationsWithProvider,
+} from '../../../ai/recommendationRefiner';
 import { markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
@@ -35,6 +38,7 @@ import type {
 type Props = RecommendationsStackScreenProps<'Recommendations'>;
 
 type RecommendationListItem = { kind: 'refined'; recommendation: RefinedRagRecommendation };
+type CachePresentation = 'current' | 'stale' | null;
 type TFunction = ReturnType<typeof useI18n>['t'];
 type RequestTagCategoryKey = 'cuisine' | 'meal' | 'dietary';
 type RequestTagCategory = {
@@ -45,7 +49,6 @@ type RequestTagCategory = {
 
 const RAG_SEARCH_CANDIDATES = 30;
 const RAG_REFINE_CANDIDATES = 30;
-const GEMINI_RETRY_COUNT = 3;
 const EMPTY_READINESS: RecommendationReadiness = {
   consentReady: false,
   credentialReady: false,
@@ -115,6 +118,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [modelProgress, setModelProgress] = useState<ModelDownloadProgress | null>(null);
   const [readiness, setReadiness] = useState<RecommendationReadiness>(EMPTY_READINESS);
   const [readinessLoading, setReadinessLoading] = useState(true);
+  const [cachePresentation, setCachePresentation] = useState<CachePresentation>(null);
   const [recommendationRequest, setRecommendationRequestState] = useState('');
   const [requestTags, setRequestTags] = useState(() => (language === 'en' ? REQUEST_TAGS_EN : REQUEST_TAGS_ZH));
   const [newRequestTag, setNewRequestTag] = useState('');
@@ -133,6 +137,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const recommendationRequestRef = useRef('');
   const activeRecommendationRequestRef = useRef('');
   const handledGenerationRequestRef = useRef<string | null>(null);
+  const consumingGenerationRequestRef = useRef(false);
   const listRef = useRef<FlatList<RecommendationListItem>>(null);
 
   const setRecommendationRequest = (value: string) => {
@@ -205,12 +210,20 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       getRecommendationInputSnapshot(language, extraPreference),
     ]);
 
-    if (!cache) {
-      return false;
-    }
+    setIngredientCount(snapshot.ingredients.length);
+    cacheInputSignatureRef.current = snapshot.inputSignature;
 
-    const cacheVisibility = classifyRecommendationCache(cache, snapshot.inputSignature, language);
-    if (cacheVisibility === 'hidden') {
+    const cacheVisibility = cache
+      ? classifyRecommendationCache(cache, snapshot.inputSignature, language)
+      : 'hidden';
+    if (!cache || cacheVisibility === 'hidden') {
+      setRefinedRecommendations([]);
+      setRagResult(null);
+      setCachePresentation(null);
+      setRefineMessage(null);
+      sentRagCandidateKeysRef.current = new Set();
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
       return false;
     }
 
@@ -222,9 +235,24 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     activeRecommendationRequestRef.current = extraPreference;
     hasLoadedOnceRef.current = true;
     setHasLoadedOnce(true);
-    setRefineMessage(cacheVisibility === 'stale' ? t('recommendations.cacheInputsChanged') : t('recommendations.cached'));
+    setCachePresentation(cacheVisibility === 'stale' ? 'stale' : 'current');
+    setRefineMessage(null);
     return true;
-  }, [getCurrentRecommendationRequest, language, t]);
+  }, [getCurrentRecommendationRequest, language]);
+
+  const refineCandidates = useCallback(
+    async (input: Omit<Parameters<typeof refineRagRecommendationsWithProvider>[0], 'outputLanguage'>) => {
+      if (!(await requestAiDataConsent(language))) {
+        return null;
+      }
+
+      return refineRagRecommendationsWithProvider({
+        ...input,
+        outputLanguage: language,
+      });
+    },
+    [language],
+  );
 
   const loadRecommendations = useCallback(async () => {
     if (loadingRef.current) {
@@ -296,22 +324,19 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       }
 
       try {
-        if (!(await requestAiDataConsent(language))) {
+        const refined = await refineCandidates({
+          apiKey,
+          ingredients,
+          settings,
+          recommendations: ragItems,
+          extraPreference,
+        });
+        if (!refined) {
           setRefineMessage(t('recommendations.aiConsentRequired'));
           return;
         }
-        const refined = await refineWithRetry(() =>
-          refineRagRecommendationsWithProvider({
-            apiKey,
-            ingredients,
-            settings,
-            recommendations: ragItems,
-            extraPreference,
-            outputLanguage: language,
-          }),
-          t,
-        );
         sentRagCandidateKeysRef.current = new Set(ragItems.map(getRagCandidateKey).filter(Boolean));
+        setCachePresentation(null);
         setRefinedRecommendations(refined);
         persistRecommendationCache(refined, rag, ingredients.length, inputSignature);
         setRefineMessage(
@@ -332,7 +357,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
     }
-  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refreshReadiness, t]);
+  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refineCandidates, refreshReadiness, t]);
 
   const refreshRecommendations = useCallback(async () => {
     sentRagCandidateKeysRef.current = new Set();
@@ -389,6 +414,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       if (requestChanged) {
         sentRagCandidateKeysRef.current = new Set();
         dismissedRecommendationKeysRef.current = new Set();
+        setCachePresentation(null);
         setRefinedRecommendations([]);
       }
 
@@ -424,23 +450,19 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       }
 
       try {
-        if (!(await requestAiDataConsent(language))) {
+        const refined = await refineCandidates({
+          apiKey,
+          ingredients,
+          settings,
+          recommendations: ragItems,
+          extraPreference,
+        });
+        if (!refined) {
           if (!silent) {
             setRefineMessage(t('recommendations.aiConsentRequired'));
           }
           return;
         }
-        const refined = await refineWithRetry(() =>
-          refineRagRecommendationsWithProvider({
-            apiKey,
-            ingredients,
-            settings,
-            recommendations: ragItems,
-            extraPreference,
-            outputLanguage: language,
-          }),
-          t,
-        );
         const sentKeys = new Set(sentRagCandidateKeysRef.current);
         for (const item of ragItems) {
           const key = getRagCandidateKey(item);
@@ -462,6 +484,9 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           return;
         }
 
+        if (replace || requestChanged) {
+          setCachePresentation(null);
+        }
         setRefinedRecommendations((current) => {
           const next = replace || requestChanged ? refinedToAppend : [...current, ...refinedToAppend];
           persistRecommendationCache(next, rag, ingredients.length, inputSignature);
@@ -488,7 +513,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refinedRecommendations, refreshReadiness, showFeedback, t]);
+  }, [getCurrentRecommendationRequest, language, persistRecommendationCache, refineCandidates, refinedRecommendations, refreshReadiness, showFeedback, t]);
 
   const changeBatch = useCallback(async () => {
     if (loading || loadingMore) {
@@ -569,7 +594,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         persistRecommendationCache(next, ragResult, ingredientCount);
         return next;
       });
-      void loadMoreRecommendations({ silent: true });
+      void loadMoreRecommendations();
     },
     [ingredientCount, loadMoreRecommendations, persistRecommendationCache, ragResult],
   );
@@ -583,11 +608,18 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         const generationRequestId = route.params?.generationRequestId;
         if (generationRequestId && handledGenerationRequestRef.current !== generationRequestId) {
           handledGenerationRequestRef.current = generationRequestId;
-          await hydrateFromCache();
-          if (active) {
+          consumingGenerationRequestRef.current = true;
+          navigation.setParams({ generationRequestId: undefined });
+          try {
+            await hydrateFromCache();
             await refreshRecommendations();
-            navigation.setParams({ generationRequestId: undefined });
+          } finally {
+            consumingGenerationRequestRef.current = false;
           }
+          return;
+        }
+
+        if (consumingGenerationRequestRef.current) {
           return;
         }
 
@@ -596,16 +628,15 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           return;
         }
 
-        const snapshot = await getRecommendationInputSnapshot(language, getCurrentRecommendationRequest());
-        if (active && cacheInputSignatureRef.current !== snapshot.inputSignature) {
-          setRefineMessage(t('recommendations.cacheInputsChanged'));
+        if (active) {
+          await hydrateFromCache();
         }
       })();
 
       return () => {
         active = false;
       };
-    }, [getCurrentRecommendationRequest, hydrateFromCache, language, navigation, refreshReadiness, refreshRecommendations, route.params?.generationRequestId, t]),
+    }, [hydrateFromCache, navigation, refreshReadiness, refreshRecommendations, route.params?.generationRequestId]),
   );
 
   const installOnnxModel = async () => {
@@ -613,7 +644,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     setModelProgress(null);
     try {
       await downloadEmbeddingModelPack(undefined, setModelProgress);
-      await loadRecommendations();
+      await refreshReadiness();
     } finally {
       setModelDownloading(false);
       setModelProgress(null);
@@ -650,6 +681,14 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     kind: 'refined',
     recommendation,
   }));
+  const presentationMessages = listData.length > 0
+    ? [
+        cachePresentation
+          ? t(cachePresentation === 'stale' ? 'recommendations.cacheInputsChanged' : 'recommendations.cached')
+          : null,
+        refineMessage,
+      ].filter((message): message is string => Boolean(message))
+    : [];
   const selectedRequestTags = parseRecommendationRequestTags(recommendationRequest);
   const requestTagCategories = buildRequestTagCategories(requestTags, language);
   const fixedActionPaddingBottom = Math.max(insets.bottom, 12);
@@ -694,8 +733,6 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         ref={listRef}
         data={listData}
         keyExtractor={(item) => item.recommendation.id}
-        refreshing={loading}
-        onRefresh={refreshRecommendations}
         onScrollToIndexFailed={({ averageItemLength, index }) => {
           listRef.current?.scrollToOffset({ animated: true, offset: Math.max(averageItemLength * index, 0) });
         }}
@@ -790,6 +827,12 @@ export function RecommendationsScreen({ navigation, route }: Props) {
                 disabled={loading || !readiness.ready || ragResult?.mode !== 'rag'}
               />
             </View>
+            <Text style={styles.actionNotice}>{t('recommendations.geminiActionNotice')}</Text>
+            {presentationMessages.map((message) => (
+              <AppCard key={message} style={styles.statusCard}>
+                <Text accessibilityLiveRegion="polite" style={styles.statusText}>{message}</Text>
+              </AppCard>
+            ))}
             {isFridgeEmpty ? (
               <AppCard style={styles.minimalCard}>
                 <SectionHeader title={t('recommendations.fridgeEmptyTitle')} detail={t('recommendations.fridgeEmptyText')} />
@@ -1116,19 +1159,6 @@ function RequestTagPill({
   return <IngredientChip label={label} selected={active} onPress={onPress} />;
 }
 
-async function refineWithRetry(task: () => Promise<RefinedRagRecommendation[]>, t: TFunction) {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= GEMINI_RETRY_COUNT; attempt += 1) {
-    try {
-      return await task();
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error(t('recommendations.geminiFailed'));
-}
-
 function formatList(items: string[], language: string, t: TFunction) {
   return items.length > 0 ? items.join(language === 'en' ? ', ' : '、') : t('recommendations.none');
 }
@@ -1365,6 +1395,18 @@ function formatGeminiRecommendationError(error: unknown, t: TFunction) {
   const message = formatError(error, t);
   const normalized = message.toLowerCase();
 
+  if (error instanceof RecommendationRefinerError) {
+    if (error.code === 'authentication') {
+      return t('recommendations.geminiAuthenticationFailed');
+    }
+    if (error.code === 'quota') {
+      return t('recommendations.geminiQuotaFailed');
+    }
+    if (error.code === 'invalid_response') {
+      return t('recommendations.geminiInvalidResponse');
+    }
+  }
+
   if (
     normalized.includes('network request failed') ||
     normalized.includes('failed to fetch') ||
@@ -1375,15 +1417,6 @@ function formatGeminiRecommendationError(error: unknown, t: TFunction) {
 
   if (message.includes('超时') || normalized.includes('timeout') || normalized.includes('aborted')) {
     return t('recommendations.geminiTimeout');
-  }
-
-  if (
-    error instanceof SyntaxError ||
-    message.includes('recommendations 数组') ||
-    message.includes('JSON') ||
-    normalized.includes('json')
-  ) {
-    return t('recommendations.geminiInvalidResponse');
   }
 
   return t('recommendations.geminiProviderFailed', { message });
@@ -1451,6 +1484,22 @@ function createStyles(appColors: AppColorTokens) {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  actionNotice: {
+    color: appColors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  statusCard: {
+    backgroundColor: appColors.accentMuted,
+    borderColor: appColors.border,
+    padding: spacing.md,
+  },
+  statusText: {
+    color: appColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   minimalCard: {
     backgroundColor: appColors.surface,

@@ -4,6 +4,17 @@ import { buildRecommendationRefinerPrompt } from './recommendationRefinerPrompt'
 import type { AppSettings, Ingredient, RagRecommendation, RefinedRagRecommendation } from '../types';
 
 type OutputLanguage = 'zh' | 'en';
+export type RecommendationRefinerFailureCode = 'authentication' | 'invalid_response' | 'provider' | 'quota';
+
+export class RecommendationRefinerError extends Error {
+  constructor(
+    readonly code: RecommendationRefinerFailureCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RecommendationRefinerError';
+  }
+}
 
 export interface RecommendationRefinerInput {
   apiKey: string;
@@ -40,7 +51,9 @@ async function refineWithGemini(
   prompt: string,
   sourceRecommendations: RagRecommendation[],
 ): Promise<RefinedRagRecommendation[]> {
-  const response = await fetchGeminiGenerateContent(apiKey, {
+  const response = await fetchGeminiGenerateContent(
+    apiKey,
+    {
       contents: [
         {
           parts: [{ text: prompt }],
@@ -51,10 +64,22 @@ async function refineWithGemini(
         temperature: 0.2,
         maxOutputTokens: 2600,
       },
-    });
+    },
+    { maxAttempts: 1 },
+  );
 
   const data = await readJsonResponse(response, 'Gemini 推荐整理失败');
-  return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
+  try {
+    return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
+  } catch (error) {
+    if (error instanceof RecommendationRefinerError) {
+      throw error;
+    }
+    throw new RecommendationRefinerError(
+      'invalid_response',
+      error instanceof Error ? error.message : 'Gemini returned an invalid recommendation response.',
+    );
+  }
 }
 
 function parseRefinedRecommendationsJson(
@@ -82,6 +107,7 @@ function parseRefinedRecommendationsJson(
       returnedItems: items.length,
       sourceItems: sourceRecommendations.length,
     });
+    throw new RecommendationRefinerError('invalid_response', 'Gemini returned an invalid recommendation response.');
   }
 
   return refined;
@@ -176,7 +202,12 @@ async function readJsonResponse(response: Response, fallbackMessage: string) {
   }
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) || `${fallbackMessage} (${response.status})`);
+    const code: RecommendationRefinerFailureCode = response.status === 401 || response.status === 403
+      ? 'authentication'
+      : response.status === 429
+        ? 'quota'
+        : 'provider';
+    throw new RecommendationRefinerError(code, readProviderError(data) || `${fallbackMessage} (${response.status})`);
   }
 
   return data;

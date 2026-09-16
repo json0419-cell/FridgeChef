@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 3;
 
 export interface GeminiRequestOptions {
+  maxAttempts?: number;
   timeoutMs?: number;
 }
 
@@ -19,8 +20,9 @@ export async function fetchGeminiGenerateContent(
   }
   await assertAiDataConsent();
 
+  const maxAttempts = Math.max(1, Math.min(options.maxAttempts ?? MAX_ATTEMPTS, MAX_ATTEMPTS));
   let lastError: unknown = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
@@ -32,7 +34,7 @@ export async function fetchGeminiGenerateContent(
         signal: controller.signal,
       });
 
-      if (isRetryableStatus(response.status) && attempt < MAX_ATTEMPTS) {
+      if (isRetryableStatus(response.status) && attempt < maxAttempts) {
         await cancelResponse(response);
         await delay(retryDelayMs(response, attempt));
         continue;
@@ -40,7 +42,7 @@ export async function fetchGeminiGenerateContent(
       return response;
     } catch (error) {
       lastError = error;
-      if (attempt >= MAX_ATTEMPTS || !isRetryableNetworkError(error)) {
+      if (attempt >= maxAttempts || !isRetryableNetworkError(error)) {
         break;
       }
       await delay(500 * 2 ** (attempt - 1));

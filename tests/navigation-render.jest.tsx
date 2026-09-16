@@ -2,11 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 import App from '../src/application/App';
-import { refineRagRecommendationsWithProvider } from '../src/ai/recommendationRefiner';
+import {
+  RecommendationRefinerError,
+  refineRagRecommendationsWithProvider,
+} from '../src/ai/recommendationRefiner';
 import { getRecommendationInputSnapshot } from '../src/features/recommendations/recommendation-input';
 import { loadRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness';
 import { getRagRecommendations } from '../src/rag/ragService';
 import { NAVIGATION_STATE_STORAGE_KEY } from '../src/storage/navigation-state-storage';
+import { loadRecommendationCache } from '../src/storage/recommendationCacheStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -80,6 +84,7 @@ jest.mock('../src/features/settings', () => {
 });
 
 jest.mock('../src/ai/recommendationRefiner', () => ({
+  ...jest.requireActual('../src/ai/recommendationRefiner'),
   refineRagRecommendationsWithProvider: jest.fn(async () => []),
 }));
 jest.mock('../src/db/cookedHistoryRepository', () => ({
@@ -140,6 +145,7 @@ jest.mock('../src/features/recommendations/recommendation-readiness', () => ({
 describe('application navigation behavior', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.mocked(loadRecommendationCache).mockResolvedValue(null);
     await AsyncStorage.clear();
     await AsyncStorage.setItem('chi_shen_me.language', 'en');
   });
@@ -318,7 +324,7 @@ describe('application navigation behavior', () => {
     await screen.findByRole('button', { name: 'Get recipe recommendations' });
     await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
     await screen.findByText('Recommendation Ready');
-    await waitFor(() => expect(jest.mocked(getRecommendationInputSnapshot).mock.calls.length).toBeGreaterThanOrEqual(6));
+    await act(async () => undefined);
 
     expect(getRagRecommendations).toHaveBeenCalledTimes(1);
     expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
@@ -366,6 +372,104 @@ describe('application navigation behavior', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Recipe Recommendations' }).props.accessibilityState).toEqual({ selected: true }));
     expect(getRagRecommendations).not.toHaveBeenCalled();
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('passively presents cached Recommendations and identifies them as cached', async () => {
+    jest.mocked(loadRecommendationCache).mockResolvedValue({
+      cachedAt: new Date().toISOString(),
+      ingredientCount: 1,
+      inputSignature: 'tomato',
+      language: 'en',
+      ragResult: {
+        mode: 'rag',
+        datasetName: 'Test recipes',
+        modelName: 'Test model',
+        query: 'tomato',
+        recommendations: [
+          {
+            id: 'candidate-1',
+            title: 'Candidate recipe',
+            score: 1,
+            text: 'Candidate recipe',
+            metadata: {},
+          },
+        ],
+      },
+      refinedRecommendations: [
+        {
+          id: 'candidate-1',
+          title: 'Tomato supper',
+          scoreReason: 'Uses the ingredient you have.',
+          matchedIngredients: ['tomato'],
+          missingIngredients: [],
+          difficulty: '简单',
+          estimatedTimeMinutes: 15,
+          servingNote: '2 servings',
+          cleanSteps: ['Cook the tomato.'],
+          notes: '',
+        },
+      ],
+      sentCandidateKeys: ['candidate-1'],
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+
+    expect(await screen.findByText('Tomato supper')).toBeTruthy();
+    expect(screen.getByText(/Showing cached recommendations/)).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    jest.mocked(refineRagRecommendationsWithProvider).mockRejectedValueOnce(
+      new RecommendationRefinerError('quota', 'quota exceeded'),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    expect(await screen.findByText(/quota is unavailable/)).toBeTruthy();
+    expect(screen.getByText(/Showing cached recommendations/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Home' }));
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    jest.mocked(getRecommendationInputSnapshot).mockResolvedValue({
+      ingredients: [{ id: 'ingredient-1', name: 'tomato' }] as never,
+      inputSignature: JSON.stringify({ settings: { dietaryPreferences: 'tomato allergy' } }),
+      recentCookedRecipeIds: new Set(),
+      settings: {} as never,
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
+    await waitFor(() => expect(screen.queryByText('Tomato supper')).toBeNull());
+  });
+
+  it('waits for an explicit retry after a Gemini failure', async () => {
+    jest.mocked(refineRagRecommendationsWithProvider)
+      .mockRejectedValueOnce(new RecommendationRefinerError('quota', 'quota exceeded'))
+      .mockResolvedValueOnce([]);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/quota is unavailable/)).toBeTruthy();
+
+    await act(async () => undefined);
+    expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(2));
+  });
+
+  it('requires an explicit retry after an invalid Gemini response', async () => {
+    jest.mocked(refineRagRecommendationsWithProvider)
+      .mockRejectedValueOnce(new RecommendationRefinerError('invalid_response', 'Gemini 返回内容为空。'))
+      .mockResolvedValueOnce([]);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/unexpected format/)).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(2));
   });
 
   it('updates every destination label when Chinese is selected', async () => {
