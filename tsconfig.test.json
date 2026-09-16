@@ -1,10 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
   "include": [
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "src/db/database-diagnostics.ts",
     "src/db/migrations.ts",
     "src/storage/api-key-storage.ts",
