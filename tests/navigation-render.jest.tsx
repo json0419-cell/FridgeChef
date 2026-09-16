@@ -244,6 +244,23 @@ describe('application navigation behavior', () => {
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
   });
 
+  it('preserves the ingredient count and offers setup recovery when readiness loading fails', async () => {
+    jest.mocked(loadRecommendationReadiness).mockRejectedValueOnce(new Error('settings unavailable'));
+
+    const screen = await render(<App />);
+    expect(await screen.findByRole('button', { name: 'View fridge · 1 ingredient' })).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('Recommendation setup is unavailable');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check setup' })).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Check setup' }));
+    await screen.findByText('Settings');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
   it('offers retry and Fridge recovery when inventory loading fails', async () => {
     jest.mocked(getRecommendationInputSnapshot).mockRejectedValueOnce(new Error('database unavailable'));
 

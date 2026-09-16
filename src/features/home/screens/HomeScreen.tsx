@@ -10,25 +10,28 @@ import { getRecommendationInputSnapshot } from '../../recommendations/recommenda
 import { loadRecommendationReadiness } from '../../recommendations/recommendation-readiness';
 
 type Props = HomeStackScreenProps<'Home'>;
-type HomePrompt = 'setup' | 'fridge' | 'inventoryError' | null;
+type HomePrompt = 'setup' | 'fridge' | 'inventoryError' | 'readinessError' | null;
+type InventoryStatus = 'loading' | 'unavailable' | 'empty' | 'populated';
 
 type HomeSnapshot = {
   consentReady: boolean;
-  error: string | null;
   ingredients: Ingredient[];
+  inventoryError: string | null;
   keyReady: boolean;
   loading: boolean;
   modelReady: boolean;
+  readinessError: string | null;
   sourceReady: boolean;
 };
 
 const INITIAL_SNAPSHOT: HomeSnapshot = {
   consentReady: false,
-  error: null,
   ingredients: [],
+  inventoryError: null,
   keyReady: false,
   loading: true,
   modelReady: false,
+  readinessError: null,
   sourceReady: false,
 };
 
@@ -41,7 +44,7 @@ export function HomeScreen({ navigation }: Props) {
   const visualLift = getResponsiveVisualLift(height, fontScale);
 
   const loadSnapshot = useCallback(async () => {
-    setSnapshot((current) => ({ ...current, error: null, loading: true }));
+    setSnapshot((current) => ({ ...current, inventoryError: null, loading: true, readinessError: null }));
     const results = await Promise.allSettled([
       getRecommendationInputSnapshot(language),
       loadRecommendationReadiness(),
@@ -53,11 +56,12 @@ export function HomeScreen({ navigation }: Props) {
 
     setSnapshot({
       consentReady: readiness?.consentReady ?? false,
-      error: firstRejectedMessage(results),
       ingredients: input?.ingredients ?? [],
+      inventoryError: rejectedMessage(inputResult),
       keyReady: readiness?.credentialReady ?? false,
       loading: false,
       modelReady: readiness?.modelReady ?? false,
+      readinessError: rejectedMessage(readinessResult),
       sourceReady: readiness?.sourceReady ?? false,
     });
   }, [language]);
@@ -78,6 +82,7 @@ export function HomeScreen({ navigation }: Props) {
   }, [snapshot.consentReady, snapshot.keyReady, snapshot.modelReady, snapshot.sourceReady, t]);
 
   const setupReady = missingSetup.length === 0;
+  const inventoryStatus = getInventoryStatus(snapshot);
 
   const openSettings = () => navigation.navigate('Settings');
   const openFridge = () => navigation.navigate('FridgeStack', { screen: 'Fridge' });
@@ -85,12 +90,16 @@ export function HomeScreen({ navigation }: Props) {
 
   const requestRecommendations = () => {
     if (snapshot.loading) return;
-    if (snapshot.error) {
+    if (inventoryStatus === 'unavailable') {
       setPrompt('inventoryError');
       return;
     }
-    if (snapshot.ingredients.length === 0) {
+    if (inventoryStatus === 'empty') {
       setPrompt('fridge');
+      return;
+    }
+    if (snapshot.readinessError) {
+      setPrompt('readinessError');
       return;
     }
     if (!setupReady) {
@@ -108,7 +117,7 @@ export function HomeScreen({ navigation }: Props) {
   const confirmPrompt = () => {
     const currentPrompt = prompt;
     closePrompt();
-    if (currentPrompt === 'inventoryError') {
+    if (currentPrompt === 'inventoryError' || currentPrompt === 'readinessError') {
       void loadSnapshot();
       return;
     }
@@ -187,7 +196,7 @@ export function HomeScreen({ navigation }: Props) {
               {t('home.geminiUsageHint')}
             </Text>
             <Pressable
-              accessibilityLabel={getFridgeButtonLabel(snapshot, t)}
+              accessibilityLabel={getFridgeButtonLabel(inventoryStatus, snapshot.ingredients.length, t)}
               accessibilityRole="button"
               onPress={openFridge}
               style={({ pressed }) => ({
@@ -206,7 +215,7 @@ export function HomeScreen({ navigation }: Props) {
             >
               <Refrigerator color={colors.primary} size={21} strokeWidth={2} />
               <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', lineHeight: 21 }}>
-                {getFridgeButtonLabel(snapshot, t)}
+                {getFridgeButtonLabel(inventoryStatus, snapshot.ingredients.length, t)}
               </Text>
             </Pressable>
           </View>
@@ -218,12 +227,13 @@ export function HomeScreen({ navigation }: Props) {
         visible={Boolean(prompt && promptCopy)}
         title={promptCopy?.title ?? ''}
         message={promptCopy?.message ?? ''}
-        cancelLabel={prompt === 'inventoryError' ? t('home.checkFridge') : t('common.cancel')}
+        cancelLabel={prompt === 'inventoryError' ? t('home.checkFridge') : prompt === 'readinessError' ? t('home.checkSetup') : t('common.cancel')}
         confirmLabel={promptCopy?.confirmLabel ?? ''}
         onCancel={() => {
-          const shouldOpenFridge = prompt === 'inventoryError';
+          const destination = prompt === 'inventoryError' ? 'fridge' : prompt === 'readinessError' ? 'settings' : null;
           closePrompt();
-          if (shouldOpenFridge) openFridge();
+          if (destination === 'fridge') openFridge();
+          if (destination === 'settings') openSettings();
         }}
         onConfirm={confirmPrompt}
       />
@@ -327,13 +337,21 @@ function getPromptCopy(prompt: HomePrompt, missingSetup: string[], t: ReturnType
   if (prompt === 'inventoryError') {
     return { title: t('home.inventoryErrorPromptTitle'), message: t('home.inventoryErrorPromptText'), confirmLabel: t('common.retry') };
   }
+  if (prompt === 'readinessError') {
+    return { title: t('home.readinessErrorPromptTitle'), message: t('home.readinessErrorPromptText'), confirmLabel: t('common.retry') };
+  }
   return null;
 }
 
-function getFridgeButtonLabel(snapshot: HomeSnapshot, t: ReturnType<typeof useI18n>['t']) {
-  if (snapshot.loading) return t('home.fridgeLoadingAction');
-  if (snapshot.error) return t('home.fridgeUnavailableAction');
-  const count = snapshot.ingredients.length;
+function getInventoryStatus(snapshot: HomeSnapshot): InventoryStatus {
+  if (snapshot.loading) return 'loading';
+  if (snapshot.inventoryError) return 'unavailable';
+  return snapshot.ingredients.length === 0 ? 'empty' : 'populated';
+}
+
+function getFridgeButtonLabel(status: InventoryStatus, count: number, t: ReturnType<typeof useI18n>['t']) {
+  if (status === 'loading') return t('home.fridgeLoadingAction');
+  if (status === 'unavailable') return t('home.fridgeUnavailableAction');
   if (count === 1) return t('home.fridgeWithOne');
   return count > 0 ? t('home.fridgeWithCount', { count }) : t('home.fridgeEmptyAction');
 }
@@ -346,10 +364,9 @@ function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === 'fulfilled' ? result.value : fallback;
 }
 
-function firstRejectedMessage(results: PromiseSettledResult<unknown>[]) {
-  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (!rejected) return null;
-  return rejected.reason instanceof Error ? rejected.reason.message : String(rejected.reason || 'Unknown error');
+function rejectedMessage(result: PromiseSettledResult<unknown>) {
+  if (result.status !== 'rejected') return null;
+  return result.reason instanceof Error ? result.reason.message : String(result.reason || 'Unknown error');
 }
 
 function getResponsiveVisualLift(height: number, fontScale: number) {
