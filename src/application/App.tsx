@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer, type InitialState } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
@@ -26,6 +26,7 @@ import { HomeScreen } from '../features/home';
 import { MyScreen } from '../features/my';
 import { RecommendationsScreen } from '../features/recommendations';
 import { DataManagementScreen, PrivacyPolicyScreen, SettingsScreen } from '../features/settings';
+import { loadNavigationState, saveNavigationState } from '../storage/navigation-state-storage';
 import { spacing, type AppColorTokens, useAppTheme } from '../shared/theme/theme';
 import type {
   FridgeStackParamList,
@@ -52,7 +53,7 @@ const TAB_ICONS = {
 
 type StartupState =
   | { status: 'loading' }
-  | { status: 'ready' }
+  | { status: 'ready'; navigationState?: InitialState }
   | { status: 'failed'; diagnostic: DatabaseStartupDiagnostic };
 
 export default function App() {
@@ -88,8 +89,11 @@ function AppContent() {
   const prepareDatabase = useCallback(async () => {
     setStartupState({ status: 'loading' });
     try {
-      await initializeDatabase();
-      setStartupState({ status: 'ready' });
+      const [navigationState] = await Promise.all([
+        loadNavigationState(),
+        initializeDatabase(),
+      ]);
+      setStartupState({ status: 'ready', navigationState });
     } catch (error) {
       setStartupState({ status: 'failed', diagnostic: createDatabaseStartupDiagnostic(error) });
     }
@@ -168,7 +172,15 @@ function AppContent() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer
+        initialState={startupState.navigationState}
+        onStateChange={(state) => {
+          if (state) {
+            void saveNavigationState(state);
+          }
+        }}
+        theme={navigationTheme}
+      >
         <StatusBar style={statusBarStyle} />
         <RootStack.Navigator screenOptions={createStackScreenOptions(colors)}>
           <RootStack.Screen name="MainTabs" component={MainTabsNavigator} options={{ headerShown: false }} />
@@ -188,6 +200,9 @@ function AppContent() {
 function MainTabsNavigator() {
   const { t } = useI18n();
   const { colors } = useAppTheme();
+  const { fontScale } = useWindowDimensions();
+  const accessibleFontScale = Math.min(Math.max(fontScale, 1), 2);
+  const tabBarHeight = 72 + Math.ceil((accessibleFontScale - 1) * 32);
 
   return (
     <Tab.Navigator
@@ -200,10 +215,20 @@ function MainTabsNavigator() {
           headerShown: false,
           sceneStyle: { backgroundColor: colors.canvas },
           tabBarActiveTintColor: colors.primary,
+          tabBarAccessibilityLabel:
+            route.name === 'RecommendationsStack'
+              ? t('nav.recommendations')
+              : t(
+                  route.name === 'HomeStack'
+                    ? 'nav.home'
+                    : route.name === 'FridgeStack'
+                      ? 'nav.fridge'
+                      : 'nav.my',
+                ),
           tabBarInactiveTintColor: colors.textTertiary,
           tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size }) => <Icon color={color} size={Math.min(size, 23)} strokeWidth={2} />,
-          tabBarItemStyle: { minHeight: 64, paddingVertical: 5 },
+          tabBarItemStyle: { minHeight: tabBarHeight - 8, paddingVertical: 5 },
           tabBarLabel: ({ color, children }) => (
             <Text
               allowFontScaling
@@ -215,7 +240,7 @@ function MainTabsNavigator() {
             </Text>
           ),
           tabBarStyle: {
-            minHeight: 72,
+            height: tabBarHeight,
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
             borderTopWidth: 1,
