@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DarkTheme, DefaultTheme, NavigationContainer, type InitialState } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -10,6 +10,7 @@ import { AppFeedbackProvider, Button } from '../shared/components';
 import { initializeDatabase } from '../db/database';
 import {
   createDatabaseStartupDiagnostic,
+  formatDatabaseStartupDiagnostic,
   type DatabaseStartupDiagnostic,
 } from '../db/database-diagnostics';
 import { I18nProvider, useI18n } from '../i18n/i18n';
@@ -109,14 +110,7 @@ function AppContent() {
 
   if (startupState.status === 'failed') {
     const { diagnostic } = startupState;
-    const diagnosticText = [
-      t('app.databaseDiagnosticCode', { code: diagnostic.code }),
-      t('app.databaseDiagnosticTime', { time: diagnostic.occurredAt }),
-      t('app.databaseDiagnosticFromVersion', {
-        version: diagnostic.fromVersion ?? t('app.databaseDiagnosticUnknownVersion'),
-      }),
-      t('app.databaseDiagnosticTargetVersion', { version: diagnostic.targetVersion }),
-    ].join('\n');
+    const diagnosticText = formatDatabaseStartupDiagnostic(diagnostic, t);
 
     return (
       <SafeAreaProvider>
@@ -148,6 +142,12 @@ function AppContent() {
                 <Text selectable style={[startupStyles.diagnosticText, { color: colors.textSecondary }]}>
                   {diagnosticText}
                 </Text>
+                <Button
+                  fullWidth
+                  title={t('app.databaseDiagnosticCopy')}
+                  variant="secondary"
+                  onPress={() => void Share.share({ message: diagnosticText }).catch(() => undefined)}
+                />
               </View>
             </View>
           </ScrollView>
