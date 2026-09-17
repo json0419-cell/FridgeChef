@@ -8,6 +8,7 @@ import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { getActionAccessibilityState } from '../../../shared/components/control-state';
+import { InstalledSourceRecoveryCard } from '../../../shared/components/InstalledSourceRecoveryCard';
 import {
   RecommendationRefinerError,
   refineRagRecommendationsWithProvider,
@@ -19,6 +20,11 @@ import { downloadEmbeddingModelPack, type ModelDownloadProgress } from '../../..
 import { getRagRecommendations, type RagResult } from '../../../rag/ragService';
 import { loadRecommendationCache, saveRecommendationCache } from '../../../storage/recommendationCacheStorage';
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../../../storage/recommendationTagStorage';
+import {
+  createInstalledSourceDiagnostic,
+  InstalledSourceRegistryError,
+  type InstalledSourceDiagnostic,
+} from '../../../storage/installed-source-registry';
 import { getApiKey, getSettings } from '../../../storage/settingsStorage';
 import { radii, spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import { classifyRecommendationCache } from '../recommendation-cache-policy';
@@ -116,6 +122,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [modelDownloading, setModelDownloading] = useState(false);
+  const [registryDiagnostic, setRegistryDiagnostic] = useState<InstalledSourceDiagnostic | null>(null);
   const [modelProgress, setModelProgress] = useState<ModelDownloadProgress | null>(null);
   const [readiness, setReadiness] = useState<RecommendationReadiness>(EMPTY_READINESS);
   const [readinessLoading, setReadinessLoading] = useState(true);
@@ -154,8 +161,10 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     try {
       const next = await loadRecommendationReadiness();
       setReadiness(next);
+      setRegistryDiagnostic(null);
       return next;
-    } catch {
+    } catch (error) {
+      setRegistryDiagnostic(error instanceof InstalledSourceRegistryError ? createInstalledSourceDiagnostic(error) : null);
       setReadiness(EMPTY_READINESS);
       return EMPTY_READINESS;
     } finally {
@@ -647,6 +656,11 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     try {
       await downloadEmbeddingModelPack(undefined, setModelProgress);
       await refreshReadiness();
+    } catch (error) {
+      if (!(error instanceof InstalledSourceRegistryError)) {
+        throw error;
+      }
+      setRegistryDiagnostic(createInstalledSourceDiagnostic(error));
     } finally {
       setModelDownloading(false);
       setModelProgress(null);
@@ -742,6 +756,13 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
+            {registryDiagnostic ? (
+              <InstalledSourceRecoveryCard
+                diagnostic={registryDiagnostic}
+                onRetry={() => void refreshReadiness()}
+                retrying={readinessLoading}
+              />
+            ) : null}
             <ReadinessChecklist
               loading={readinessLoading}
               readiness={readiness}

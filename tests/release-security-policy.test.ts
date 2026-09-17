@@ -117,6 +117,24 @@ test('model installation commits only after verified downloads complete', () => 
   assert.ok(register > runtimeTest, 'registry must be updated after the runtime test passes');
 });
 
+test('pack installs and removals read the installed-source registry before touching files', () => {
+  const dataset = read('src/datasets/datasetPack.ts');
+  const datasetRead = dataset.indexOf('await listInstalledDatasets()');
+  assert.ok(datasetRead >= 0);
+  assert.ok(datasetRead < dataset.indexOf('ensureDirectory(root)'), 'dataset install must refuse before creating directories');
+
+  const uninstall = dataset.slice(dataset.indexOf('export async function uninstallDataset'));
+  assert.ok(
+    uninstall.indexOf('await listInstalledDatasets()') < uninstall.indexOf('directory.delete()'),
+    'dataset removal must refuse before deleting files',
+  );
+
+  const model = read('src/rag/model/modelPack.ts');
+  const modelRead = model.indexOf('await listInstalledEmbeddingModels()');
+  assert.ok(modelRead >= 0);
+  assert.ok(modelRead < model.indexOf('ensureDirectory(root)'), 'model install must refuse before creating directories');
+});
+
 test('privacy policy and in-app disclosure remain present', () => {
   const policy = read('PRIVACY.md');
   const app = read('src/application/App.tsx');

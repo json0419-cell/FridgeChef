@@ -1,36 +1,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
+import { createEmbeddingModelRegistry, EMBEDDING_MODEL_REGISTRY_KEY } from './model-registry-store';
 
-const MODEL_REGISTRY_KEY = 'chi_shen_me.embedding_model_registry.v1';
+const registry = createEmbeddingModelRegistry(AsyncStorage);
 
-export async function listInstalledEmbeddingModels(): Promise<InstalledEmbeddingModel[]> {
-  const raw = await AsyncStorage.getItem(MODEL_REGISTRY_KEY);
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isInstalledEmbeddingModel) : [];
-  } catch {
-    return [];
-  }
+export function readInstalledEmbeddingModelRegistry() {
+  return registry.read();
 }
 
-export async function getActiveEmbeddingModel(): Promise<InstalledEmbeddingModel | null> {
-  const models = await listInstalledEmbeddingModels();
-  return models.find((model) => model.active) ?? models[0] ?? null;
+/** Throws InstalledSourceRegistryError when the registry is unreadable; it never reports an unreadable registry as empty. */
+export function listInstalledEmbeddingModels(): Promise<InstalledEmbeddingModel[]> {
+  return registry.list();
 }
 
-export async function saveInstalledEmbeddingModel(model: InstalledEmbeddingModel): Promise<void> {
-  const models = await listInstalledEmbeddingModels();
-  const next = models.filter((item) => item.id !== model.id);
-  next.push(model);
-  await saveRegistry(normalizeActiveModel(next, model.active ? model.id : undefined));
+export function getActiveEmbeddingModel(): Promise<InstalledEmbeddingModel | null> {
+  return registry.getActive();
 }
 
+export function saveInstalledEmbeddingModel(model: InstalledEmbeddingModel): Promise<void> {
+  return registry.save(model);
+}
+
+/** Explicit, user-confirmed destructive reset used by local data cleanup. */
 export async function clearInstalledEmbeddingModelRegistry(): Promise<void> {
-  await AsyncStorage.removeItem(MODEL_REGISTRY_KEY);
+  await AsyncStorage.removeItem(EMBEDDING_MODEL_REGISTRY_KEY);
 }
 
 export function createInstalledEmbeddingModelFromManifest(
@@ -55,33 +48,4 @@ export function createInstalledEmbeddingModelFromManifest(
     dimension: manifest.model.dimension,
     maxLength: manifest.model.maxLength,
   };
-}
-
-async function saveRegistry(models: InstalledEmbeddingModel[]) {
-  await AsyncStorage.setItem(MODEL_REGISTRY_KEY, JSON.stringify(models));
-}
-
-function normalizeActiveModel(models: InstalledEmbeddingModel[], activeModelId?: string) {
-  if (models.length === 0) {
-    return [];
-  }
-
-  const activeId = activeModelId ?? models.find((item) => item.active)?.id ?? models[0].id;
-  return models.map((item) => ({ ...item, active: item.id === activeId }));
-}
-
-function isInstalledEmbeddingModel(value: unknown): value is InstalledEmbeddingModel {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === 'string' &&
-    typeof record.name === 'string' &&
-    typeof record.version === 'string' &&
-    typeof record.localRootUri === 'string' &&
-    typeof record.manifestUri === 'string' &&
-    typeof record.dimension === 'number'
-  );
 }

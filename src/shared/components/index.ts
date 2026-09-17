@@ -14,3 +14,4 @@ export {
   TopLevelHeader,
 } from './Foundation';
 export { Screen } from './Screen';
+export { InstalledSourceRecoveryCard } from './InstalledSourceRecoveryCard';

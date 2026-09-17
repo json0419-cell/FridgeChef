@@ -50,6 +50,9 @@ export async function downloadEmbeddingModelPack(
 ): Promise<InstalledEmbeddingModel> {
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Model manifest URL').toString();
   const manifest = await fetchEmbeddingModelManifest(normalizedManifestUrl);
+  // Read the registry before touching files so an unreadable registry refuses the install up front.
+  const existingModels = await listInstalledEmbeddingModels();
+  const existingModel = existingModels.find((item) => item.id === manifest.id);
   const root = getModelsRootDirectory();
   ensureDirectory(root);
 
@@ -59,8 +62,6 @@ export async function downloadEmbeddingModelPack(
   const resumableBytes = countResumableBytes(stagingDirectory, manifest.files);
   assertSufficientDiskSpace(Math.max(0, totalBytes - resumableBytes));
 
-  const existingModels = await listInstalledEmbeddingModels();
-  const existingModel = existingModels.find((item) => item.id === manifest.id);
   let completedBytes = 0;
   let backupDirectory: Directory | null = null;
   let committed = false;

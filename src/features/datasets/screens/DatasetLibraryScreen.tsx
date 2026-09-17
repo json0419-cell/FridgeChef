@@ -4,13 +4,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RefreshCw, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppTextInput } from '../../../shared/components/AppLayout';
+import { InstalledSourceRecoveryCard } from '../../../shared/components/InstalledSourceRecoveryCard';
 import {
   fetchDatasetIndex,
   OFFICIAL_DATASET_INDEX_URL,
   resolveDatasetManifestUrl,
 } from '../../../datasets/datasetIndex';
 import { downloadDatasetPack, uninstallDataset, type DatasetDownloadProgress } from '../../../datasets/datasetPack';
-import { clearActiveDataset, listInstalledDatasets, setActiveDataset } from '../../../datasets/datasetRegistry';
+import { clearActiveDataset, readInstalledDatasetRegistry, setActiveDataset } from '../../../datasets/datasetRegistry';
+import {
+  createInstalledSourceDiagnostic,
+  InstalledSourceRegistryError,
+  type InstalledSourceDiagnostic,
+} from '../../../storage/installed-source-registry';
 import { listUserRecipeLibraries, listUserRecipes } from '../../../db/userRecipesRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
@@ -33,6 +39,10 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   const [manualDownloading, setManualDownloading] = useState(false);
   const [downloadingDatasetId, setDownloadingDatasetId] = useState<string | null>(null);
   const [progress, setProgress] = useState<DatasetDownloadProgress | null>(null);
+  const [registryDiagnostic, setRegistryDiagnostic] = useState<InstalledSourceDiagnostic | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(true);
+  // Every registry mutation stays unavailable until the registry has been read successfully.
+  const registryLocked = registryLoading || registryDiagnostic !== null;
 
   useEffect(() => {
     navigation.setOptions({
@@ -45,7 +55,28 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   }, [navigation, t]);
 
   const loadDatasets = useCallback(async () => {
-    setDatasets(await listInstalledDatasets());
+    setRegistryLoading(true);
+    try {
+      const result = await readInstalledDatasetRegistry();
+      if (result.status === 'readable') {
+        setDatasets(result.records);
+        setRegistryDiagnostic(null);
+      } else {
+        setDatasets([]);
+        setRegistryDiagnostic(createInstalledSourceDiagnostic(result.error));
+      }
+    } finally {
+      setRegistryLoading(false);
+    }
+  }, []);
+
+  const handleRegistryError = useCallback((error: unknown) => {
+    if (!(error instanceof InstalledSourceRegistryError)) {
+      return false;
+    }
+    setDatasets([]);
+    setRegistryDiagnostic(createInstalledSourceDiagnostic(error));
+    return true;
   }, []);
 
   const loadUserRecipeStats = useCallback(async () => {
@@ -83,6 +114,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   );
 
   const installFromUrl = async () => {
+    if (registryLocked) {
+      return;
+    }
     const url = manifestUrl.trim();
     if (!url) {
       Alert.alert(t('dataset.missingUrl'));
@@ -97,7 +131,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       await loadDatasets();
       Alert.alert(t('dataset.installedTitle'), t('dataset.installedBody'));
     } catch (error) {
-      Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      if (!handleRegistryError(error)) {
+        Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      }
     } finally {
       setManualDownloading(false);
       setProgress(null);
@@ -105,6 +141,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   };
 
   const installOfficialDataset = async (dataset: DatasetIndexEntry) => {
+    if (registryLocked) {
+      return;
+    }
     const url = resolveDatasetManifestUrl(OFFICIAL_DATASET_INDEX_URL, dataset);
     setDownloadingDatasetId(dataset.id);
     setProgress(null);
@@ -113,7 +152,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       await loadDatasets();
       Alert.alert(t('dataset.installedTitle'), `${dataset.name}\n${t('dataset.installedBody')}`);
     } catch (error) {
-      Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      if (!handleRegistryError(error)) {
+        Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      }
     } finally {
       setDownloadingDatasetId(null);
       setProgress(null);
@@ -121,15 +162,28 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   };
 
   const toggleDataset = async (dataset: InstalledDataset) => {
-    if (dataset.active) {
-      await clearActiveDataset(dataset.id);
-    } else {
-      await setActiveDataset(dataset.id);
+    if (registryLocked) {
+      return;
+    }
+    try {
+      if (dataset.active) {
+        await clearActiveDataset(dataset.id);
+      } else {
+        await setActiveDataset(dataset.id);
+      }
+    } catch (error) {
+      if (!handleRegistryError(error)) {
+        Alert.alert(t('dataset.toggleFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      }
+      return;
     }
     await loadDatasets();
   };
 
   const remove = (dataset: InstalledDataset) => {
+    if (registryLocked) {
+      return;
+    }
     Alert.alert(t('dataset.deleteTitle'), t('dataset.deleteBody', { name: dataset.name }), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -140,7 +194,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
             await uninstallDataset(dataset);
             await loadDatasets();
           } catch (error) {
-            Alert.alert(t('dataset.deleteFailed'), error instanceof Error ? error.message : t('common.unknown'));
+            if (!handleRegistryError(error)) {
+              Alert.alert(t('dataset.deleteFailed'), error instanceof Error ? error.message : t('common.unknown'));
+            }
           }
         },
       },
@@ -150,6 +206,9 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   return (
     <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        {registryDiagnostic ? (
+          <InstalledSourceRecoveryCard diagnostic={registryDiagnostic} onRetry={() => void loadDatasets()} retrying={registryLoading} />
+        ) : null}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{myLibrariesTitle(language)}</Text>
@@ -198,7 +257,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
                 </Text>
                 {installed ? (
                   <View style={styles.actions}>
-                    <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => toggleDataset(installed)}>
+                    <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => void toggleDataset(installed)}>
                       <Text style={styles.linkText}>{installed.active ? t('dataset.disable') : t('dataset.enable')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => remove(installed)}>
@@ -208,7 +267,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
                 ) : (
                   <ActionButton
                     title={t('dataset.download')}
-                    disabled={Boolean(downloadingDatasetId) || manualDownloading}
+                    disabled={registryLocked || Boolean(downloadingDatasetId) || manualDownloading}
                     loading={downloadingThis}
                     onPress={() => installOfficialDataset(item)}
                     style={styles.cardButton}
@@ -235,7 +294,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
             placeholder={t('dataset.urlPlaceholder')}
             style={styles.input}
           />
-          <ActionButton title={t('dataset.downloadInstall')} onPress={installFromUrl} loading={manualDownloading} disabled={Boolean(downloadingDatasetId)} />
+          <ActionButton title={t('dataset.downloadInstall')} onPress={installFromUrl} loading={manualDownloading} disabled={registryLocked || Boolean(downloadingDatasetId)} />
           {progress && manualDownloading ? (
             <Text style={styles.progress}>
               {progress.completedFiles}/{progress.totalFiles} {t('common.files')} · {formatBytes(progress.completedBytes)} / {formatBytes(progress.totalBytes)}

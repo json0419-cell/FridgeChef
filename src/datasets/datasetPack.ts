@@ -36,6 +36,9 @@ export async function downloadDatasetPack(
 ): Promise<InstalledDataset> {
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Dataset manifest URL').toString();
   const manifest = await fetchDatasetManifest(normalizedManifestUrl);
+  // Read the registry before touching files so an unreadable registry refuses the install up front.
+  const existingDatasets = await listInstalledDatasets();
+  const existingDataset = existingDatasets.find((item) => item.id === manifest.id);
 
   const root = getDatasetsRootDirectory();
   ensureDirectory(root);
@@ -46,8 +49,6 @@ export async function downloadDatasetPack(
   assertSufficientDiskSpace(totalBytes);
   ensureDirectory(stagingDirectory);
 
-  const existingDatasets = await listInstalledDatasets();
-  const existingDataset = existingDatasets.find((item) => item.id === manifest.id);
   let completedBytes = 0;
   let backupDirectory: Directory | null = null;
   let committed = false;
@@ -187,6 +188,9 @@ export async function uninstallDataset(dataset: InstalledDataset): Promise<void>
   if (!isChildUri(root.uri, directory.uri)) {
     throw new Error('拒绝删除非 datasets 目录下的文件。');
   }
+
+  // Refuse before deleting files when the registry cannot record the removal.
+  await listInstalledDatasets();
 
   if (directory.exists) {
     directory.delete();
