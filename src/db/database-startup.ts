@@ -1,5 +1,10 @@
 import type { Recipe } from '../types';
-import { DatabaseMigrationError, migrateDatabase, type MigrationDatabase } from './migrations.ts';
+import {
+  DatabaseMigrationError,
+  migrateDatabase,
+  readSchemaVersion,
+  type MigrationDatabase,
+} from './migrations.ts';
 
 export type BaseRecipe = Recipe;
 
@@ -35,6 +40,7 @@ export function createDatabaseStartup<Database extends StartupDatabase>({
 
   async function initializeDatabase() {
     const database = await getDatabase();
+    const originalVersion = await readSchemaVersion(database);
     const version = await migrateDatabase(database);
 
     try {
@@ -43,7 +49,7 @@ export function createDatabaseStartup<Database extends StartupDatabase>({
       throw new DatabaseMigrationError(
         'DATABASE_SEEDING_FAILED',
         'Base Recipe Library seeding failed.',
-        version,
+        originalVersion,
         version,
         { cause: error },
       );

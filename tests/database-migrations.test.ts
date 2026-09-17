@@ -187,6 +187,23 @@ test('an injected failure mid-seed leaves the prior recipes and all user tables 
   assert.deepEqual(database.snapshot(), before);
 });
 
+test('a seeding failure after an upgrade reports the original version and preserves user data', async (context) => {
+  const database = openFixture(1, failOnRecipeInsert(2));
+  context.after(() => database.close());
+  const before = database.snapshot();
+
+  await assert.rejects(
+    () => startupFor(database).initializeDatabase(),
+    (error) =>
+      error instanceof DatabaseMigrationError &&
+      error.code === 'DATABASE_SEEDING_FAILED' &&
+      error.fromVersion === 1 &&
+      error.toVersion === DATABASE_SCHEMA_VERSION,
+  );
+
+  assert.deepEqual(database.snapshotLike(before), before);
+});
+
 test('retrying after a transient seeding failure succeeds without data loss', async (context) => {
   const database = openFixture(1, failOnRecipeInsert(1));
   context.after(() => database.close());

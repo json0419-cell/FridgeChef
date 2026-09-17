@@ -95,7 +95,7 @@ export async function migrateDatabase(database: MigrationDatabase): Promise<numb
   return currentVersion;
 }
 
-async function readSchemaVersion(database: MigrationDatabase) {
+export async function readSchemaVersion(database: MigrationDatabase) {
   const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = Number(row?.user_version ?? 0);
 
