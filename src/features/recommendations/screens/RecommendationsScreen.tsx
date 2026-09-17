@@ -767,7 +767,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
               loading={readinessLoading}
               readiness={readiness}
               onOpenConsent={() => navigation.navigate('PrivacyPolicy', { returnAfterConsent: true })}
-              onOpenCredential={() => navigation.navigate('Settings')}
+              onOpenCredential={() => navigation.navigate('ApiKeySettings')}
               onOpenModel={() => void installOnnxModel()}
               onOpenSource={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
               t={t}

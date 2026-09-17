@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const read = (path: string) => readFileSync(path, 'utf8');
+const sourceFiles = (directory: string): string[] =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name).replaceAll('\\', '/');
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
 
 test('release configuration blocks the overlay permission', () => {
   const appConfig = JSON.parse(read('app.json')) as {
@@ -52,20 +59,36 @@ test('Android backup rules exclude SecureStore credentials', () => {
   assert.doesNotMatch(modernRules, /domain="file"/);
 });
 
-test('the API key settings screen blocks capture without media permissions', () => {
+test('capture protection is limited to the API key surface without media or screenshot permissions', () => {
   const appConfig = JSON.parse(read('app.json')) as {
-    expo?: { android?: { blockedPermissions?: string[] } };
+    expo?: { android?: { blockedPermissions?: string[]; permissions?: string[] } };
   };
-  const settingsScreen = read('src/features/settings/screens/SettingsScreen.tsx');
+  const mainManifest = read('android/app/src/main/AndroidManifest.xml');
   const packageJson = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+  const protection = read('src/privacy/credential-capture-protection.ts');
+  const sources = sourceFiles('src');
 
   assert.equal(packageJson.dependencies?.['expo-screen-capture'], '~57.0.2');
-  assert.match(settingsScreen, /preventScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
-  assert.match(settingsScreen, /allowScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.match(protection, /preventScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.match(protection, /allowScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.doesNotMatch(protection, /ScreenshotListener|requestPermissionsAsync/);
+  assert.deepEqual(
+    sources.filter((file) => read(file).includes('expo-screen-capture')),
+    ['src/privacy/credential-capture-protection.ts'],
+  );
+  assert.deepEqual(
+    sources.filter((file) => /^\s+useCredentialCaptureProtection\(\);/m.test(read(file))),
+    ['src/features/settings/screens/api-key-settings-screen.tsx'],
+  );
+
   assert.equal(
     appConfig.expo?.android?.blockedPermissions?.includes('android.permission.READ_MEDIA_IMAGES'),
     true,
   );
+  for (const permission of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'DETECT_SCREEN_CAPTURE']) {
+    assert.equal(appConfig.expo?.android?.permissions?.includes(`android.permission.${permission}`) ?? false, false);
+  }
+  assert.doesNotMatch(mainManifest, /android\.permission\.DETECT_SCREEN_CAPTURE/);
 });
 
 test('all Gemini feature modules use the unified network client', () => {

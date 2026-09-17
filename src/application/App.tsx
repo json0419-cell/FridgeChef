@@ -25,7 +25,7 @@ import { HistoryScreen } from '../features/history';
 import { HomeScreen } from '../features/home';
 import { MyScreen } from '../features/my';
 import { RecommendationsScreen } from '../features/recommendations';
-import { DataManagementScreen, PrivacyPolicyScreen, SettingsScreen } from '../features/settings';
+import { ApiKeySettingsScreen, DataManagementScreen, PrivacyPolicyScreen, SettingsScreen } from '../features/settings';
 import { loadNavigationState, saveNavigationState } from '../storage/navigation-state-storage';
 import { spacing, type AppColorTokens, useAppTheme } from '../shared/theme/theme';
 import type {
@@ -189,6 +189,11 @@ function AppContent() {
         <RootStack.Navigator screenOptions={createStackScreenOptions(colors)}>
           <RootStack.Screen name="MainTabs" component={MainTabsNavigator} options={{ headerShown: false }} />
           <RootStack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
+          <RootStack.Screen
+            name="ApiKeySettings"
+            component={ApiKeySettingsScreen}
+            options={{ title: t('nav.apiKeySettings') }}
+          />
           <RootStack.Screen
             name="DataManagement"
             component={DataManagementScreen}

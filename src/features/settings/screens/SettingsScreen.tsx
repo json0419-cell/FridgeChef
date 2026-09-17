@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -11,47 +10,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import * as ScreenCapture from 'expo-screen-capture';
 import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../shared/components/AppLayout';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
-import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
-import { testProviderConnection } from '../../../ai/providerAdapter';
 import { useI18n, type LanguagePreference } from '../../../i18n/i18n';
-import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
-import {
-  clearApiKey,
-  getApiKey,
-  getSettings,
-  markApiKeyVerified,
-  saveApiKey,
-  saveSettings,
-} from '../../../storage/settingsStorage';
+import { getSettings, hasApiKey, saveSettings } from '../../../storage/settingsStorage';
 import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../../../types';
 
 type Props = SettingsScreenProps;
-const GEMINI_API_KEY_URL = 'https://aistudio.google.com/app/apikey';
-const CREDENTIAL_SCREEN_CAPTURE_KEY = 'gemini-api-key-settings';
-
-type ConfirmDialogState = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  tone: 'danger' | 'info';
-  onConfirm: () => void;
-} | null;
 
 export function SettingsScreen({ navigation }: Props) {
-  useFocusEffect(
-    useCallback(() => {
-      void ScreenCapture.preventScreenCaptureAsync(CREDENTIAL_SCREEN_CAPTURE_KEY);
-      return () => {
-        void ScreenCapture.allowScreenCaptureAsync(CREDENTIAL_SCREEN_CAPTURE_KEY);
-      };
-    }, []),
-  );
-  const { language, languagePreference, setLanguagePreference, t } = useI18n();
+  const { languagePreference, setLanguagePreference, t } = useI18n();
   const { colors: appColors } = useAppTheme();
   const styles = useMemo(() => createStyles(appColors), [appColors]);
   const { showFeedback } = useFeedback();
@@ -60,49 +30,20 @@ export function SettingsScreen({ navigation }: Props) {
   const [maxTimeMinutes, setMaxTimeMinutes] = useState('');
   const [preferredDifficulty, setPreferredDifficulty] = useState<RecommendationDifficultyPreference>('any');
   const [recentHistoryDays, setRecentHistoryDays] = useState('7');
-  const [apiKey, setApiKey] = useState('');
-  const [savedApiKeyValue, setSavedApiKeyValue] = useState('');
   const [savedKey, setSavedKey] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [languageButtonFocused, setLanguageButtonFocused] = useState(false);
   const [focusedLanguagePreference, setFocusedLanguagePreference] = useState<LanguagePreference | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
-  const skipUnsavedApiKeyPromptRef = useRef(false);
-  const hasUnsavedApiKey = apiKey.trim() !== savedApiKeyValue;
 
   useEffect(() => {
     void loadSettings();
   }, []);
 
-  useEffect(() => {
-    if (!hasUnsavedApiKey) {
-      return undefined;
-    }
-
-    return navigation.addListener('beforeRemove', (event) => {
-      if (skipUnsavedApiKeyPromptRef.current) {
-        return;
-      }
-
-      if (!hasUnsavedApiKey) {
-        return;
-      }
-
-      event.preventDefault();
-      setConfirmDialog({
-        title: t('settings.unsavedApiKeyTitle'),
-        message: t('settings.unsavedApiKeyBody'),
-        confirmLabel: t('settings.unsavedApiKeyDiscard'),
-        tone: 'danger',
-        onConfirm: () => {
-          skipUnsavedApiKeyPromptRef.current = true;
-          setConfirmDialog(null);
-          navigation.dispatch(event.data.action);
-        },
-      });
-    });
-  }, [hasUnsavedApiKey, navigation, t]);
+  useFocusEffect(
+    useCallback(() => {
+      void hasApiKey('gemini').then(setSavedKey);
+    }, []),
+  );
 
   const loadSettings = async () => {
     const settings = await getSettings();
@@ -111,10 +52,6 @@ export function SettingsScreen({ navigation }: Props) {
     setMaxTimeMinutes(settings.maxTimeMinutes ? String(settings.maxTimeMinutes) : '');
     setPreferredDifficulty(settings.preferredDifficulty);
     setRecentHistoryDays(String(settings.recentHistoryDays));
-    const key = await getApiKey('gemini');
-    setApiKey(key ?? '');
-    setSavedApiKeyValue(key ?? '');
-    setSavedKey(Boolean(key));
   };
 
   const savePlainSettings = async () => {
@@ -130,90 +67,6 @@ export function SettingsScreen({ navigation }: Props) {
       showFeedback({ tone: 'success', title: t('settings.saved') });
     } catch (error) {
       showFeedback({ tone: 'error', title: t('settings.saveFailed'), message: formatError(error, t) });
-    }
-  };
-
-  const saveCurrentApiKey = async () => {
-    setBusy(true);
-    try {
-      const trimmedApiKey = apiKey.trim();
-      await savePlainSettingsValue();
-      await saveApiKey('gemini', trimmedApiKey);
-      setApiKey(trimmedApiKey);
-      setSavedApiKeyValue(trimmedApiKey);
-      setSavedKey(Boolean(trimmedApiKey));
-      showFeedback({ tone: 'success', title: t('settings.apiKeySavedTitle'), message: t('settings.apiKeySavedBody') });
-    } catch (error) {
-      showFeedback({ tone: 'error', title: t('settings.saveFailed'), message: formatError(error, t) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const savePlainSettingsValue = async () =>
-    saveSettings({
-      provider: 'gemini',
-      servings: Number(servings),
-      dietaryPreferences,
-      maxTimeMinutes: parseOptionalNumber(maxTimeMinutes),
-      preferredDifficulty,
-      recentHistoryDays: parsePositiveNumber(recentHistoryDays, 7),
-    });
-
-  const clearCurrentApiKey = async () => {
-    setBusy(true);
-    try {
-      await clearApiKey('gemini');
-      setApiKey('');
-      setSavedApiKeyValue('');
-      setSavedKey(false);
-      showFeedback({ tone: 'success', title: t('settings.apiKeyCleared') });
-    } catch (error) {
-      showFeedback({ tone: 'error', title: t('settings.clearFailed'), message: formatError(error, t) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmClearApiKey = () => {
-    setConfirmDialog({
-      title: t('settings.clearApiKeyConfirmTitle'),
-      message: t('settings.clearApiKeyConfirmBody'),
-      confirmLabel: t('settings.clearApiKeyConfirmAction'),
-      tone: 'danger',
-      onConfirm: () => {
-        setConfirmDialog(null);
-        void clearCurrentApiKey();
-      },
-    });
-  };
-
-  const testConnection = async () => {
-    if (!(await requestAiDataConsent(language))) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const key = apiKey.trim() || (await getApiKey('gemini')) || '';
-      await testProviderConnection('gemini', key);
-      await saveApiKey('gemini', key);
-      await markApiKeyVerified('gemini');
-      setApiKey(key);
-      setSavedApiKeyValue(key);
-      setSavedKey(true);
-      showFeedback({ tone: 'success', title: t('settings.connectionSuccess'), message: t('common.gemini') });
-    } catch (error) {
-      showFeedback({ tone: 'error', title: t('settings.connectionFailed'), message: formatError(error, t) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openGeminiApiKeyPage = async () => {
-    try {
-      await Linking.openURL(GEMINI_API_KEY_URL);
-    } catch (error) {
-      showFeedback({ tone: 'error', title: t('settings.openApiKeyHelpFailed'), message: formatError(error, t) });
     }
   };
 
@@ -276,46 +129,12 @@ export function SettingsScreen({ navigation }: Props) {
 
           <AppCard style={styles.minimalCard}>
             <SectionHeader title={t('settings.geminiApiKey')} />
-            <AppTextInput
-              accessibilityLabel={t('settings.geminiApiKey')}
-              value={apiKey}
-              onChangeText={setApiKey}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={t('settings.apiKeyPlaceholder')}
-              style={styles.input}
+            <Text style={styles.helper}>{savedKey ? t('settings.keySaved') : t('settings.keyMissing')}</Text>
+            <ActionButton
+              title={t('settings.manageApiKey')}
+              variant="secondary"
+              onPress={() => navigation.navigate('ApiKeySettings')}
             />
-            <Pressable
-              accessibilityRole="link"
-              onPress={openGeminiApiKeyPage}
-              style={({ pressed }) => [styles.apiKeyHelpLink, pressed && styles.apiKeyHelpLinkPressed]}
-            >
-              <Text style={styles.apiKeyHelpLinkText}>{t('settings.apiKeyHelpLink')}</Text>
-            </Pressable>
-            <View style={styles.apiKeyActions}>
-              <View style={styles.apiKeyActionRow}>
-                <ActionButton
-                  title={t('settings.clearApiKey')}
-                  variant="destructive"
-                  onPress={confirmClearApiKey}
-                  disabled={busy || !savedKey}
-                  style={styles.apiKeyActionButton}
-                />
-                <ActionButton
-                  title={t('settings.saveApiKey')}
-                  onPress={saveCurrentApiKey}
-                  loading={busy}
-                  style={styles.apiKeyActionButton}
-                />
-              </View>
-              <ActionButton
-                title={t('settings.testConnection')}
-                variant="secondary"
-                onPress={testConnection}
-                disabled={busy}
-              />
-            </View>
           </AppCard>
 
           <AppCard style={styles.minimalCard}>
@@ -383,17 +202,6 @@ export function SettingsScreen({ navigation }: Props) {
           </AppCard>
         </ScrollView>
       </KeyboardAvoidingView>
-      <AppConfirmModal
-        visible={Boolean(confirmDialog)}
-        title={confirmDialog?.title ?? ''}
-        message={confirmDialog?.message ?? ''}
-        cancelLabel={t('common.cancel')}
-        confirmLabel={confirmDialog?.confirmLabel ?? ''}
-        toneLabel={confirmDialog?.tone === 'danger' ? t('common.confirmation') : t('common.notice')}
-        tone={confirmDialog?.tone}
-        onCancel={() => setConfirmDialog(null)}
-        onConfirm={() => confirmDialog?.onConfirm()}
-      />
     </SafeAreaView>
   );
 }
@@ -555,33 +363,6 @@ function createStyles(appColors: AppColorTokens) {
     color: appColors.textSecondary,
     lineHeight: 20,
     fontWeight: '700',
-  },
-  apiKeyHelpLink: {
-    alignSelf: 'flex-start',
-    minHeight: 48,
-    minWidth: 48,
-    justifyContent: 'center',
-    paddingVertical: spacing.xs,
-  },
-  apiKeyHelpLinkPressed: {
-    opacity: 0.72,
-  },
-  apiKeyHelpLinkText: {
-    color: appColors.primary,
-    fontSize: 15,
-    fontWeight: '900',
-    fontFamily: typography.strong,
-    textDecorationLine: 'underline',
-  },
-  apiKeyActions: {
-    gap: spacing.sm,
-  },
-  apiKeyActionRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  apiKeyActionButton: {
-    flex: 1,
   },
   chipRow: {
     flexDirection: 'row',

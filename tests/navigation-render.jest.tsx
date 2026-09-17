@@ -87,6 +87,7 @@ jest.mock('../src/features/recipes', () => {
 jest.mock('../src/features/settings', () => {
   const { Text } = require('react-native');
   return {
+    ApiKeySettingsScreen: () => <Text>API key settings</Text>,
     DataManagementScreen: () => <Text>Data management</Text>,
     PrivacyPolicyScreen: () => <Text>Privacy policy</Text>,
     SettingsScreen: () => <Text>Settings</Text>,
@@ -626,6 +627,9 @@ describe('application navigation behavior', () => {
     await waitFor(() => expect(action.props.accessibilityState).toEqual({ busy: false, disabled: false }));
     expect(screen.queryByRole('button', { name: /Agree to the AI data disclosure/ })).toBeNull();
     expect(screen.getByLabelText('Agree to the AI data disclosure. Ready')).toBeTruthy();
+
+    await fireEvent.press(action);
+    await screen.findByText('API key settings');
   });
 
   it('updates every destination label when Chinese is selected', async () => {
