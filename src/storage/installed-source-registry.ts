@@ -164,3 +164,11 @@ function unreadable(
 function safeVersion(value: unknown) {
   return Number.isSafeInteger(value) ? (value as number) : null;
 }
+
+export function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+export function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}

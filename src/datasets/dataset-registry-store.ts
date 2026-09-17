@@ -1,10 +1,13 @@
 import type { InstalledDataset } from '../types';
 import {
   createInstalledSourceRegistry,
+  isCount,
+  isString,
   type RegistryReadResult,
   type RegistryStore,
 } from '../storage/installed-source-registry.ts';
 
+// The key name predates the in-value version; the stored envelope's `version` is authoritative.
 export const DATASET_REGISTRY_KEY = 'chi_shen_me.dataset_registry.v1';
 
 const DATASET_LEVELS = new Set(['lite', 'medium', 'standard', 'full', 'custom']);
@@ -73,12 +76,4 @@ export function isInstalledDataset(value: unknown): value is InstalledDataset {
     isString(record.embeddingModel) &&
     isCount(record.embeddingDimension)
   );
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }

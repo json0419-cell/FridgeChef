@@ -1,10 +1,13 @@
 import type { InstalledEmbeddingModel } from '../../types';
 import {
   createInstalledSourceRegistry,
+  isCount,
+  isString,
   type RegistryReadResult,
   type RegistryStore,
 } from '../../storage/installed-source-registry.ts';
 
+// The key name predates the in-value version; the stored envelope's `version` is authoritative.
 export const EMBEDDING_MODEL_REGISTRY_KEY = 'chi_shen_me.embedding_model_registry.v1';
 
 export interface EmbeddingModelRegistry {
@@ -69,12 +72,4 @@ export function isInstalledEmbeddingModel(value: unknown): value is InstalledEmb
     isCount(record.maxLength) &&
     (record.testEmbeddingVerifiedAt === undefined || isString(record.testEmbeddingVerifiedAt))
   );
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
