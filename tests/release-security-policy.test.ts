@@ -76,15 +76,23 @@ test('capture protection is limited to the API key surface without media or scre
     sources.filter((file) => read(file).includes('expo-screen-capture')),
     ['src/privacy/credential-capture-protection.ts'],
   );
+  // Match any call spelling, indented or not, so a stray protected screen cannot slip past.
   assert.deepEqual(
-    sources.filter((file) => /^\s+useCredentialCaptureProtection\(\);/m.test(read(file))),
+    sources.filter(
+      (file) =>
+        file !== 'src/privacy/credential-capture-protection.ts' &&
+        /useCredentialCaptureProtection\b/.test(read(file)),
+    ),
     ['src/features/settings/screens/api-key-settings-screen.tsx'],
   );
 
-  assert.equal(
-    appConfig.expo?.android?.blockedPermissions?.includes('android.permission.READ_MEDIA_IMAGES'),
-    true,
-  );
+  for (const permission of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'DETECT_SCREEN_CAPTURE']) {
+    assert.equal(
+      appConfig.expo?.android?.blockedPermissions?.includes(`android.permission.${permission}`),
+      true,
+      `${permission} must be blocked so a dependency cannot merge it into the manifest`,
+    );
+  }
   for (const permission of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'DETECT_SCREEN_CAPTURE']) {
     assert.equal(appConfig.expo?.android?.permissions?.includes(`android.permission.${permission}`) ?? false, false);
   }

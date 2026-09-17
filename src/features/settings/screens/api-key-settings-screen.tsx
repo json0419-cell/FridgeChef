@@ -33,6 +33,7 @@ export function ApiKeySettingsScreen({ navigation }: ApiKeySettingsScreenProps) 
   const [savedKey, setSavedKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
+  const [keyRevealed, setKeyRevealed] = useState(false);
   const skipUnsavedApiKeyPromptRef = useRef(false);
   const hasUnsavedApiKey = apiKey.trim() !== savedApiKeyValue;
 
@@ -153,19 +154,34 @@ export function ApiKeySettingsScreen({ navigation }: ApiKeySettingsScreenProps) 
               accessibilityLabel={t('settings.geminiApiKey')}
               value={apiKey}
               onChangeText={setApiKey}
-              secureTextEntry
+              secureTextEntry={!keyRevealed}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder={t('settings.apiKeyPlaceholder')}
               style={styles.input}
             />
-            <Pressable
-              accessibilityRole="link"
-              onPress={openGeminiApiKeyPage}
-              style={({ pressed }) => [styles.apiKeyHelpLink, pressed && styles.apiKeyHelpLinkPressed]}
-            >
-              <Text style={styles.apiKeyHelpLinkText}>{t('settings.apiKeyHelpLink')}</Text>
-            </Pressable>
+            <View style={styles.apiKeyInlineRow}>
+              <Pressable
+                accessibilityRole="link"
+                onPress={openGeminiApiKeyPage}
+                style={({ pressed }) => [styles.apiKeyHelpLink, pressed && styles.apiKeyHelpLinkPressed]}
+              >
+                <Text style={styles.apiKeyHelpLinkText}>{t('settings.apiKeyHelpLink')}</Text>
+              </Pressable>
+              {/* Revealing the key never lifts capture protection: the hook holds it for the
+                  whole screen, so a revealed key stays out of screenshots and task previews. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={keyRevealed ? t('settings.hideApiKey') : t('settings.revealApiKey')}
+                accessibilityState={{ expanded: keyRevealed }}
+                onPress={() => setKeyRevealed((revealed) => !revealed)}
+                style={({ pressed }) => [styles.apiKeyHelpLink, pressed && styles.apiKeyHelpLinkPressed]}
+              >
+                <Text style={styles.apiKeyHelpLinkText}>
+                  {keyRevealed ? t('settings.hideApiKey') : t('settings.revealApiKey')}
+                </Text>
+              </Pressable>
+            </View>
             <View style={styles.apiKeyActions}>
               <View style={styles.apiKeyActionRow}>
                 <ActionButton
@@ -240,6 +256,12 @@ function createStyles(appColors: AppColorTokens) {
       borderRadius: 10,
       paddingHorizontal: 16,
       fontSize: 16,
+    },
+    apiKeyInlineRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
     },
     apiKeyHelpLink: {
       alignSelf: 'flex-start',

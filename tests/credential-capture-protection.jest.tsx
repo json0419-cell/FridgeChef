@@ -18,6 +18,10 @@ jest.mock('expo-screen-capture', () => {
   const state = { secure: false };
   return {
     __state: state,
+    __reset: () => {
+      active.clear();
+      state.secure = false;
+    },
     // Mirrors the library: the native flag is set only for a newly held key and cleared only
     // once no key is held.
     preventScreenCaptureAsync: jest.fn(async (key = 'default') => {
@@ -40,7 +44,8 @@ jest.mock('../src/storage/settingsStorage', () => ({
   hasApiKey: jest.fn(async () => false),
 }));
 
-const captureState = (ScreenCapture as unknown as { __state: { secure: boolean } }).__state;
+const captureModule = ScreenCapture as unknown as { __state: { secure: boolean }; __reset: () => void };
+const captureState = captureModule.__state;
 const Stack = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef();
 
@@ -62,7 +67,7 @@ async function renderSettings() {
 describe('credential capture protection', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
-    captureState.secure = false;
+    captureModule.__reset();
     await AsyncStorage.clear();
     await AsyncStorage.setItem('chi_shen_me.language', 'en');
   });
@@ -80,6 +85,26 @@ describe('credential capture protection', () => {
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Manage API Key' }));
     await screen.findByRole('button', { name: 'Save API Key' });
+    expect(captureState.secure).toBe(true);
+
+    await act(async () => navigationRef.goBack());
+    await screen.findByText('Servings');
+    expect(captureState.secure).toBe(false);
+  });
+
+  it('keeps capture blocked while the key is revealed', async () => {
+    const screen = await renderSettings();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Manage API Key' }));
+    const input = await screen.findByLabelText('Gemini API Key');
+    expect(input.props.secureTextEntry).toBe(true);
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Show API Key' }));
+    expect((await screen.findByLabelText('Gemini API Key')).props.secureTextEntry).toBe(false);
+    expect(captureState.secure).toBe(true);
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Hide API Key' }));
+    expect((await screen.findByLabelText('Gemini API Key')).props.secureTextEntry).toBe(true);
     expect(captureState.secure).toBe(true);
 
     await act(async () => navigationRef.goBack());
