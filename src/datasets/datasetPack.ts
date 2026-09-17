@@ -16,7 +16,7 @@ import {
 } from '../downloads/pack-security';
 import {
   createInstalledDatasetFromManifest,
-  listInstalledDatasets,
+  listStoredInstalledDatasets,
   removeInstalledDataset,
   saveInstalledDataset,
 } from './datasetRegistry';
@@ -42,7 +42,7 @@ export async function downloadDatasetPack(
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Dataset manifest URL').toString();
   const manifest = await fetchDatasetManifest(normalizedManifestUrl);
   // Read the registry before touching files so an unreadable registry refuses the install up front.
-  const existingDatasets = await listInstalledDatasets();
+  const existingDatasets = await listStoredInstalledDatasets();
   const existingDataset = existingDatasets.find((item) => item.id === manifest.id);
 
   const root = getDatasetsRootDirectory();
