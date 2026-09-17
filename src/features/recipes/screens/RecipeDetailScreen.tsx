@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Sparkles } from 'lucide-react-native';
-import { fetchGeminiGenerateContent } from '../../../ai/geminiClient';
+import { fetchGeminiGenerateContent, readGeminiJsonResponse } from '../../../ai/geminiClient';
 import { extractGeminiText } from '../../../ai/json';
 import { getOfficialRecipeById } from '../../../db/recipesRepository';
 import { getUserRecipeById } from '../../../db/userRecipesRepository';
@@ -272,12 +272,13 @@ async function refineRecipeStepsWithGemini(recipe: DisplayRecipe, apiKey: string
       },
     });
 
+  // The body is read through the shared reader so a rejection that echoes the key cannot reach
+  // this screen's error text.
+  const { data, providerErrorMessage } = await readGeminiJsonResponse(response, apiKey);
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Gemini refinement failed (${response.status}): ${body.slice(0, 120)}`);
+    throw new Error(providerErrorMessage || `Gemini refinement failed (${response.status})`);
   }
 
-  const data = (await response.json()) as unknown;
   const steps = parseRefinedSteps(extractGeminiText(data));
   if (steps.length === 0) {
     throw new Error('Gemini did not return usable cooking steps.');

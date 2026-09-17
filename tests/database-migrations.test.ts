@@ -9,6 +9,7 @@ import {
   type MigrationDatabase,
 } from '../src/db/migrations.ts';
 import { createDatabaseStartupDiagnostic } from '../src/db/database-diagnostics.ts';
+import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
 
 const schemaV1 = readFileSync('tests/fixtures/database-schema-v1.sql', 'utf8');
 const schemaV2 = readFileSync('tests/fixtures/database-schema-v2.sql', 'utf8');
@@ -87,7 +88,7 @@ test('a failed migration rolls back schema changes and preserves original data',
 });
 
 test('startup diagnostics expose only recovery metadata', () => {
-  const secret = 'AIza-secret-key-that-must-never-appear';
+  const secret = SENTINEL_API_KEY;
   const error = new DatabaseMigrationError(
     'DATABASE_MIGRATION_FAILED',
     `Failed near ingredient data and ${secret}`,

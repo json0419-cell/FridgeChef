@@ -1,5 +1,5 @@
 import { buildFoodRecognitionPrompt } from './prompt';
-import { fetchGeminiGenerateContent } from './geminiClient';
+import { fetchGeminiGenerateContent, readGeminiJsonResponse } from './geminiClient';
 import { extractGeminiText, extractJsonObject, parseRecognitionJson } from './json';
 import type { RecognitionResult, UserRecipeDifficulty } from '../types';
 
@@ -56,7 +56,7 @@ export async function recognizeWithGemini({
       },
     }, { timeoutMs: 60_000 });
 
-  const data = await readJsonResponse(response, 'Gemini 识别失败');
+  const data = await readJsonResponse(response, 'Gemini 识别失败', apiKey);
   return parseRecognitionJson(extractGeminiText(data));
 }
 
@@ -84,7 +84,7 @@ export async function generateRecipeFromYouTubeWithGemini({
       },
     }, { timeoutMs: 90_000 });
 
-  const data = await readJsonResponse(response, 'Gemini YouTube 菜谱生成失败');
+  const data = await readJsonResponse(response, 'Gemini YouTube 菜谱生成失败', apiKey);
   return parseYoutubeRecipeJson(extractGeminiText(data), youtubeUrl);
 }
 
@@ -146,7 +146,7 @@ export async function testGeminiConnection(apiKey: string): Promise<void> {
       },
     });
 
-  await readJsonResponse(response, 'Gemini 连接测试失败');
+  await readJsonResponse(response, 'Gemini 连接测试失败', apiKey);
 }
 
 function parseYoutubeRecipeJson(raw: string, youtubeUrl: string): GeneratedYoutubeRecipe {
@@ -188,36 +188,14 @@ function parseYoutubeRecipeJson(raw: string, youtubeUrl: string): GeneratedYoutu
   return recipe;
 }
 
-async function readJsonResponse(response: Response, fallbackMessage: string) {
-  const text = await response.text();
-  let data: unknown = null;
-
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
+async function readJsonResponse(response: Response, fallbackMessage: string, apiKey: string) {
+  const { data, providerErrorMessage } = await readGeminiJsonResponse(response, apiKey);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) || `${fallbackMessage} (${response.status})`);
+    throw new Error(providerErrorMessage || `${fallbackMessage} (${response.status})`);
   }
 
   return data;
-}
-
-function readProviderError(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-
-  const root = data as Record<string, unknown>;
-  const error = root.error;
-  if (!error || typeof error !== 'object') {
-    return null;
-  }
-
-  const message = (error as Record<string, unknown>).message;
-  return typeof message === 'string' ? message : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

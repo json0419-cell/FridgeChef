@@ -8,6 +8,7 @@ import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { testProviderConnection } from '../../../ai/providerAdapter';
 import { useI18n } from '../../../i18n/i18n';
 import { useCredentialCaptureProtection } from '../../../privacy/credential-capture-protection';
+import { redactCredentials } from '../../../privacy/credential-redaction';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { clearApiKey, getApiKey, markApiKeyVerified, saveApiKey } from '../../../storage/settingsStorage';
 import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
@@ -224,7 +225,10 @@ export function ApiKeySettingsScreen({ navigation }: ApiKeySettingsScreenProps) 
 }
 
 function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  // Storage and provider failures can quote the credential they were handed; this screen is the
+  // one surface where the user may also have it revealed, so nothing key-shaped is shown back.
+  return redactCredentials(message);
 }
 
 function createStyles(appColors: AppColorTokens) {

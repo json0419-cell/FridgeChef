@@ -21,6 +21,7 @@
     "src/downloads/temporary-download-artifacts.ts",
     "src/downloads/streaming-sha256.ts",
     "src/ai/geminiConfig.ts",
+    "src/privacy/credential-redaction.ts",
     "src/storage/data-cleanup-policy.ts",
     "src/db/data-cleanup-database.ts",
     "src/features/recommendations/recommendation-readiness-policy.ts"

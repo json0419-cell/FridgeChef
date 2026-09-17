@@ -9,6 +9,7 @@ import {
   type DataCleanupOperations,
   type DataCleanupStep,
 } from '../src/storage/data-cleanup-policy.ts';
+import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
 
 test('each named cleanup action affects only its own data category', async () => {
   for (const category of DATA_CLEANUP_CATEGORIES) {
@@ -40,7 +41,7 @@ test('clearing all continues after a failed category and reports only category n
   };
   operations.apiKey = async () => {
     calls.push('apiKey');
-    throw new Error('AIza-secret-that-must-not-appear');
+    throw new Error(SENTINEL_API_KEY);
   };
   const runCleanup = createDataCleanupRunner(operations);
 
@@ -51,6 +52,7 @@ test('clearing all continues after a failed category and reports only category n
       const aggregate = error as DataCleanupAggregateError;
       assert.deepEqual(aggregate.failedSteps, ['downloadedPacks', 'apiKey']);
       assert.equal(aggregate.message.includes(secret), false);
+      assert.equal(aggregate.message.includes(SENTINEL_API_KEY), false);
       assert.equal(aggregate.message.includes('AIza'), false);
       return true;
     },
