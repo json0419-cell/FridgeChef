@@ -343,7 +343,7 @@ export type RootNativeStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Settings: undefined;
   DataManagement: undefined;
-  PrivacyPolicy: undefined;
+  PrivacyPolicy: { returnAfterConsent?: boolean } | undefined;
 };
 
 export type RootStackParamList = RootNativeStackParamList;

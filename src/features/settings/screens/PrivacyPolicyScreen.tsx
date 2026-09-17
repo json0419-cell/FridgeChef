@@ -10,7 +10,7 @@ import type { PrivacyPolicyScreenProps } from '../../../types';
 
 type Props = PrivacyPolicyScreenProps;
 
-export function PrivacyPolicyScreen({}: Props) {
+export function PrivacyPolicyScreen({ navigation, route }: Props) {
   const { language } = useI18n();
   const { showFeedback } = useFeedback();
   const copy = getCopy(language);
@@ -35,6 +35,10 @@ export function PrivacyPolicyScreen({}: Props) {
       }
       setConsented(next);
       showFeedback({ tone: 'success', title: next ? copy.consentGranted : copy.consentRevoked });
+      // A setup step that sent the user here expects them back once they agree.
+      if (next && route.params?.returnAfterConsent && navigation.canGoBack()) {
+        navigation.goBack();
+      }
     } catch (error) {
       showFeedback({
         tone: 'error',

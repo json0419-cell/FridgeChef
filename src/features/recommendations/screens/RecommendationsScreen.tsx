@@ -745,7 +745,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
             <ReadinessChecklist
               loading={readinessLoading}
               readiness={readiness}
-              onOpenConsent={() => navigation.navigate('PrivacyPolicy')}
+              onOpenConsent={() => navigation.navigate('PrivacyPolicy', { returnAfterConsent: true })}
               onOpenCredential={() => navigation.navigate('Settings')}
               onOpenModel={() => void installOnnxModel()}
               onOpenSource={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
