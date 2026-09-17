@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isInstalledArtifactPresent } from '../../downloads/installed-artifact-presence';
-import { reconcileInstalledSourceRead } from '../../storage/installed-source-presence';
+import { createReconciledInstalledSourceReader } from '../../storage/installed-source-presence';
 import type { EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
 import {
   createEmbeddingModelRegistry,
@@ -9,34 +9,19 @@ import {
 } from './model-registry-store';
 
 const registry = createEmbeddingModelRegistry(AsyncStorage);
+// Records are reconciled against the files on disk, so a record restored from backup without its
+// model files is reported as not installed rather than as a usable model.
+const installed = createReconciledInstalledSourceReader(registry, isInstalledArtifactPresent);
 
-/**
- * Reads the registry and reconciles it against the files on disk, so a record restored from backup
- * without its model files is reported as not installed rather than as a usable model.
- */
-export async function readInstalledEmbeddingModelRegistry() {
-  return reconcileInstalledSourceRead(await registry.read(), isInstalledArtifactPresent);
-}
+export const readInstalledEmbeddingModelRegistry = installed.read;
 
-/** Throws InstalledSourceRegistryError when the registry is unreadable; it never reports an unreadable registry as empty. */
-export async function listInstalledEmbeddingModels(): Promise<InstalledEmbeddingModel[]> {
-  const result = await readInstalledEmbeddingModelRegistry();
-  if (result.status === 'unreadable') {
-    throw result.error;
-  }
-  return result.records;
-}
+export const listInstalledEmbeddingModels = installed.list;
 
-/**
- * Every stored record, including ones whose files are absent. Installing reads this so it can carry
- * a restored record's enabled state over to the model the user reinstalls.
- */
-export function listStoredInstalledEmbeddingModels(): Promise<InstalledEmbeddingModel[]> {
-  return registry.list();
-}
+/** Installing reads this so a reinstall can carry a restored record's enabled state over. */
+export const listStoredInstalledEmbeddingModels = installed.listStored;
 
 export async function getActiveEmbeddingModel(): Promise<InstalledEmbeddingModel | null> {
-  return selectActiveEmbeddingModel(await listInstalledEmbeddingModels());
+  return selectActiveEmbeddingModel(await installed.list());
 }
 
 export function saveInstalledEmbeddingModel(model: InstalledEmbeddingModel): Promise<void> {

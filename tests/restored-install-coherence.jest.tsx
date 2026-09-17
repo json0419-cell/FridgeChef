@@ -47,9 +47,28 @@ jest.mock('../src/datasets/datasetPack', () => ({
   uninstallDataset: jest.fn(),
 }));
 
+const customPack = {
+  id: 'custom-pack',
+  name: 'Custom Pack',
+  version: '1.0.0',
+  description: 'Unverified pack installed from a URL',
+  level: 'custom',
+  recipeCount: 12,
+  chunkCount: 40,
+  localRootUri: 'file:///files/datasets/custom-pack_1.0.0/',
+  manifestUri: 'file:///files/datasets/custom-pack_1.0.0/dataset-pack.json',
+  installedAt: '2026-09-01T00:00:00.000Z',
+  active: true,
+  status: 'installed',
+  sizeBytes: 512,
+  embeddingModel: 'bge-m3',
+  embeddingDimension: 1024,
+};
+
 const restoredDatasetRegistry = JSON.stringify({
   version: 2,
   records: [
+    customPack,
     {
       id: 'official-lite',
       name: 'Official Lite',
@@ -119,6 +138,23 @@ describe('an install restored without its model and pack files', () => {
     // Reporting a pack as not installed rewrites nothing: the record is still there to reinstall over.
     expect(await AsyncStorage.getItem(DATASET_REGISTRY_KEY)).toBe(restoredDatasetRegistry);
     expect(await AsyncStorage.getItem(EMBEDDING_MODEL_REGISTRY_KEY)).toBe(restoredModelRegistry);
+  });
+
+  it('keeps a restored Unverified DatasetPack reachable instead of stranding its record', async () => {
+    const navigation = { navigate: jest.fn(), setOptions: jest.fn() };
+
+    const screen = await render(
+      <I18nProvider>
+        <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+      </I18nProvider>,
+    );
+
+    // It has no catalogue entry to reappear in, so the library lists it as not installed and says why.
+    expect(await screen.findByText('Custom Pack')).toBeTruthy();
+    expect(screen.getByText(/backups do not include library files/)).toBeTruthy();
+    // It cannot be enabled or disabled while its files are gone, but its record can still be cleared.
+    expect(screen.queryByRole('button', { name: 'Disable' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
   });
 
   it('is not Recommendation Ready until the key is re-entered and the model reinstalled', async () => {

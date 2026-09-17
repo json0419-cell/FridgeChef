@@ -35,6 +35,34 @@ export function reconcileInstalledSourceRead<T extends InstalledArtifactLocation
   return { status: 'readable', records, missing };
 }
 
+export interface ReconciledInstalledSourceReader<T> {
+  /** Readable records are the ones whose files are on disk, alongside the ones that are not. */
+  read(): Promise<ReconciledRegistryReadResult<T>>;
+  /** Throws InstalledSourceRegistryError when the registry is unreadable; it never reports an unreadable registry as empty. */
+  list(): Promise<T[]>;
+  /** Every stored record, including ones whose files are absent. */
+  listStored(): Promise<T[]>;
+}
+
+export function createReconciledInstalledSourceReader<T extends InstalledArtifactLocation>(
+  registry: { read(): Promise<RegistryReadResult<T>>; list(): Promise<T[]> },
+  isArtifactPresent: (record: T) => boolean,
+): ReconciledInstalledSourceReader<T> {
+  const read = async () => reconcileInstalledSourceRead(await registry.read(), isArtifactPresent);
+
+  return {
+    read,
+    async list() {
+      const result = await read();
+      if (result.status === 'unreadable') {
+        throw result.error;
+      }
+      return result.records;
+    },
+    listStored: () => registry.list(),
+  };
+}
+
 function isPresent<T>(record: T, isArtifactPresent: (record: T) => boolean) {
   try {
     return isArtifactPresent(record);
