@@ -1,6 +1,8 @@
 import type { Directory } from 'expo-file-system';
 import { getDatasetsRootDirectory } from '../datasets/datasetPack';
 import { clearInstalledDatasetRegistry } from '../datasets/datasetRegistry';
+import { removeInstalledArtifact } from '../downloads/installed-artifact-removal';
+import { removePartialDownloads, type RemovableEntry } from '../downloads/temporary-download-artifacts';
 import {
   clearCachedDatabaseData,
   clearCookingHistoryData,
@@ -20,18 +22,22 @@ const runCleanup = createDataCleanupRunner({
   caches: async () => {
     await clearCachedDatabaseData();
     await clearRecommendationCache();
+    // Partial downloads are regenerable too: a download restarts or resumes from scratch.
+    removePartialDownloads(listDownloadRootEntries());
   },
   ingredients: clearIngredientData,
   history: clearCookingHistoryData,
   personalRecipes: clearPersonalRecipeData,
-  downloadedPacks: async () => {
-    deleteKnownRoot(getDatasetsRootDirectory());
-    await clearInstalledDatasetRegistry();
-  },
-  model: async () => {
-    deleteKnownRoot(getModelsRootDirectory());
-    await clearInstalledEmbeddingModelRegistry();
-  },
+  downloadedPacks: () =>
+    removeInstalledArtifact({
+      removeRecord: clearInstalledDatasetRegistry,
+      deleteArtifactFiles: () => deleteKnownRoot(getDatasetsRootDirectory()),
+    }),
+  model: () =>
+    removeInstalledArtifact({
+      removeRecord: clearInstalledEmbeddingModelRegistry,
+      deleteArtifactFiles: () => deleteKnownRoot(getModelsRootDirectory()),
+    }),
   apiKey: () => clearApiKey('gemini'),
   preferences: async () => {
     await Promise.all([
@@ -51,4 +57,10 @@ function deleteKnownRoot(directory: Directory) {
   if (directory.exists) {
     directory.delete();
   }
+}
+
+function listDownloadRootEntries(): RemovableEntry[] {
+  return [getDatasetsRootDirectory(), getModelsRootDirectory()].flatMap((root) =>
+    root.exists ? root.list() : [],
+  );
 }

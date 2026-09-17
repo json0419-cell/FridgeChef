@@ -1,6 +1,11 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import type { DatasetPackManifest, InstalledDataset } from '../types';
 import { calculateFileSha256 } from '../downloads/file-integrity';
+import { removeInstalledArtifact } from '../downloads/installed-artifact-removal';
+import {
+  backupDirectoryName,
+  stagingDirectoryName,
+} from '../downloads/temporary-download-artifacts';
 import {
   assertHttpsUrl,
   assertSha256Matches,
@@ -44,7 +49,7 @@ export async function downloadDatasetPack(
   ensureDirectory(root);
 
   const directoryName = sanitizePathSegment(`${manifest.id}_${manifest.version}`);
-  const stagingDirectory = new Directory(root, `${directoryName}.download-${Date.now()}-${randomSuffix()}`);
+  const stagingDirectory = new Directory(root, stagingDirectoryName(directoryName));
   const totalBytes = manifest.files.reduce((total, file) => total + file.sizeBytes, 0);
   assertSufficientDiskSpace(totalBytes);
   ensureDirectory(stagingDirectory);
@@ -117,11 +122,11 @@ export async function downloadDatasetPack(
 
     const previousDirectory = new Directory(root, directoryName);
     if (previousDirectory.exists) {
-      backupDirectory = new Directory(root, `${directoryName}.backup-${Date.now()}-${randomSuffix()}`);
-      previousDirectory.move(backupDirectory);
+      backupDirectory = new Directory(root, backupDirectoryName(directoryName));
+      previousDirectory.moveSync(backupDirectory);
     }
 
-    stagingDirectory.move(new Directory(root, directoryName));
+    stagingDirectory.moveSync(new Directory(root, directoryName));
     committed = true;
 
     const localManifestFile = new File(stagingDirectory, 'dataset-pack.json');
@@ -148,7 +153,7 @@ export async function downloadDatasetPack(
     }
 
     if (backupDirectory?.exists) {
-      backupDirectory.move(new Directory(root, directoryName));
+      backupDirectory.moveSync(new Directory(root, directoryName));
     }
 
     throw error;
@@ -189,14 +194,14 @@ export async function uninstallDataset(dataset: InstalledDataset): Promise<void>
     throw new Error('拒绝删除非 datasets 目录下的文件。');
   }
 
-  // Refuse before deleting files when the registry cannot record the removal.
-  await listInstalledDatasets();
-
-  if (directory.exists) {
-    directory.delete();
-  }
-
-  await removeInstalledDataset(dataset.id);
+  await removeInstalledArtifact({
+    removeRecord: () => removeInstalledDataset(dataset.id),
+    deleteArtifactFiles: () => {
+      if (directory.exists) {
+        directory.delete();
+      }
+    },
+  });
 }
 
 function ensureDirectory(directory: Directory) {
@@ -257,9 +262,6 @@ function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function randomSuffix() {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;

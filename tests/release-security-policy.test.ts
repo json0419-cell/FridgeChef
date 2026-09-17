@@ -137,7 +137,7 @@ test('model installation commits only after verified downloads complete', () => 
   const source = read('src/rag/model/modelPack.ts');
   const verify = source.indexOf('await downloadAndVerifyModelFile(');
   const writeManifest = source.indexOf("writeTextFile(new File(stagingDirectory, 'model-pack.json')");
-  const promote = source.indexOf('stagingDirectory.move(installedDirectory)');
+  const promote = source.indexOf('stagingDirectory.moveSync(installedDirectory)');
   const runtimeTest = source.indexOf('await verifyEmbeddingModelRuntime(installedCandidate)');
   const register = source.indexOf('await saveInstalledEmbeddingModel(installed)');
 
@@ -154,10 +154,18 @@ test('pack installs and removals read the installed-source registry before touch
   assert.ok(datasetRead >= 0);
   assert.ok(datasetRead < dataset.indexOf('ensureDirectory(root)'), 'dataset install must refuse before creating directories');
 
+  // Removal drops the registry record first: an unreadable or unwritable registry then deletes
+  // nothing, and a failed deletion can only orphan files (ADR 0008).
   const uninstall = dataset.slice(dataset.indexOf('export async function uninstallDataset'));
+  const removeRecord = uninstall.indexOf('removeRecord:');
+  const deleteFiles = uninstall.indexOf('deleteArtifactFiles:');
+  assert.ok(removeRecord >= 0, 'dataset removal must go through removeInstalledArtifact');
+  assert.ok(deleteFiles > removeRecord, 'dataset removal must drop the registry record before deleting files');
+
+  const removal = read('src/downloads/installed-artifact-removal.ts');
   assert.ok(
-    uninstall.indexOf('await listInstalledDatasets()') < uninstall.indexOf('directory.delete()'),
-    'dataset removal must refuse before deleting files',
+    removal.indexOf('await removeRecord()') < removal.indexOf('deleteArtifactFiles()'),
+    'installed-artifact removal must await the record removal before deleting files',
   );
 
   const model = read('src/rag/model/modelPack.ts');

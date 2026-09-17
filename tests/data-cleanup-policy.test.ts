@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DATA_CLEANUP_CATEGORIES,
+  DATA_CLEANUP_STEPS,
+  DATA_CLEANUP_STEP_TITLE_KEYS,
   DataCleanupAggregateError,
   createDataCleanupRunner,
   type DataCleanupOperations,
@@ -55,6 +57,30 @@ test('clearing all continues after a failed category and reports only category n
   );
 
   assert.deepEqual(calls, [...DATA_CLEANUP_CATEGORIES, 'preferences']);
+});
+
+test('a failed named action leaves every other data category untouched', async () => {
+  for (const category of DATA_CLEANUP_CATEGORIES) {
+    const calls: DataCleanupStep[] = [];
+    const operations = createOperations(calls);
+    operations[category] = async () => {
+      calls.push(category);
+      throw new Error('Injected category failure');
+    };
+    const runCleanup = createDataCleanupRunner(operations);
+
+    await assert.rejects(() => runCleanup(category), /Injected category failure/);
+
+    assert.deepEqual(calls, [category]);
+  }
+});
+
+test('every cleanup step has a safe category title to report a partial failure with', () => {
+  assert.deepEqual(DATA_CLEANUP_STEPS, [...DATA_CLEANUP_CATEGORIES, 'preferences']);
+
+  for (const step of DATA_CLEANUP_STEPS) {
+    assert.equal(DATA_CLEANUP_STEP_TITLE_KEYS[step], `dataManagement.${step}Title`);
+  }
 });
 
 function createOperations(calls: DataCleanupStep[]): DataCleanupOperations {

@@ -12,6 +12,10 @@ import {
   resolveSecurePackFileUrl,
 } from '../../downloads/pack-security';
 import {
+  backupDirectoryName,
+  resumableStagingDirectoryName,
+} from '../../downloads/temporary-download-artifacts';
+import {
   createInstalledEmbeddingModelFromManifest,
   listInstalledEmbeddingModels,
   saveInstalledEmbeddingModel,
@@ -99,12 +103,12 @@ export async function downloadEmbeddingModelPack(
 
     const previousDirectory = new Directory(root, directoryName);
     if (previousDirectory.exists) {
-      backupDirectory = new Directory(root, `${directoryName}.backup-${Date.now()}-${randomSuffix()}`);
-      previousDirectory.move(backupDirectory);
+      backupDirectory = new Directory(root, backupDirectoryName(directoryName));
+      previousDirectory.moveSync(backupDirectory);
     }
 
     const installedDirectory = new Directory(root, directoryName);
-    stagingDirectory.move(installedDirectory);
+    stagingDirectory.moveSync(installedDirectory);
     committed = true;
 
     const installedCandidate = createInstalledEmbeddingModelFromManifest(
@@ -132,7 +136,7 @@ export async function downloadEmbeddingModelPack(
       removeDirectoryIfPresent(root, new Directory(root, directoryName));
     }
     if (backupDirectory?.exists) {
-      backupDirectory.move(new Directory(root, directoryName));
+      backupDirectory.moveSync(new Directory(root, directoryName));
     }
 
     // Before commit the isolated staging directory is deliberately kept as a resumable cache.
@@ -293,14 +297,14 @@ function prepareStagingDirectory(
   manifest: EmbeddingModelPackManifest,
   manifestUrl: string,
 ) {
-  let staging = new Directory(root, `${directoryName}.download`);
+  let staging = new Directory(root, resumableStagingDirectoryName(directoryName));
   const resumeKey = createResumeKey(manifest, manifestUrl);
 
   if (staging.exists) {
     const state = readDownloadState(staging);
     if (state?.resumeKey !== resumeKey) {
       removeDirectoryIfPresent(root, staging);
-      staging = new Directory(root, `${directoryName}.download`);
+      staging = new Directory(root, resumableStagingDirectoryName(directoryName));
     }
   }
 
@@ -429,9 +433,6 @@ function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function randomSuffix() {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 function isRetryableStatus(status: number) {
   return status === 408 || status === 429 || status >= 500;

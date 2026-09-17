@@ -7,9 +7,12 @@ import { useI18n } from '../../../i18n/i18n';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { radii, spacing, type AppColorTokens, useAppTheme } from '../../../shared/theme/theme';
+import { clearLocalData } from '../../../storage/local-data-cleanup';
 import {
+  DATA_CLEANUP_STEP_TITLE_KEYS,
   DataCleanupAggregateError,
   type DataCleanupCategory,
+  type DataCleanupStep,
 } from '../../../storage/data-cleanup-policy';
 
 interface CleanupItem {
@@ -76,6 +79,8 @@ export function DataManagementScreen() {
     },
   ];
 
+  const stepTitle = (step: DataCleanupStep) => t(DATA_CLEANUP_STEP_TITLE_KEYS[step]);
+
   const confirmCleanup = async () => {
     const item = pendingItem;
     if (!item || busyCategory) {
@@ -87,7 +92,6 @@ export function DataManagementScreen() {
     let cleanupError: unknown = null;
 
     try {
-      const { clearLocalData } = await import('../../../storage/local-data-cleanup');
       await clearLocalData(item.category);
     } catch (error) {
       cleanupError = error;
@@ -108,10 +112,15 @@ export function DataManagementScreen() {
         message: t('dataManagement.successBody', { name: item.title }),
       });
     } else if (cleanupError instanceof DataCleanupAggregateError) {
+      // Only the failed steps' own category titles reach the user: never an error message, which
+      // could carry a file path or stored content.
+      const categories = cleanupError.failedSteps.map(stepTitle).join(t('dataManagement.partialCategorySeparator'));
       showFeedback({
         tone: 'error',
         title: t('dataManagement.partialTitle'),
-        message: t('dataManagement.partialBody'),
+        message: categories
+          ? t('dataManagement.partialBodyCategories', { categories })
+          : t('dataManagement.partialBody'),
       });
     } else {
       showFeedback({
