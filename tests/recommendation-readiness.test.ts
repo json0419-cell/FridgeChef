@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { evaluateRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness-policy.ts';
+import {
+  evaluateRecommendationReadiness,
+  hasRetrievableRecipeSource,
+} from '../src/features/recommendations/recommendation-readiness-policy.ts';
 
 const READY_INPUT = {
   consentReady: true,
@@ -37,4 +40,18 @@ test('readiness keeps the individual condition states for a persistent checklist
       ready: false,
     },
   );
+});
+
+// The bug: the Base Recipe Library ships inside the app, so counting it reported the recipe-source
+// step as done on a fresh install while Local Retrieval had nothing to search.
+test('the bundled Base Recipe Library alone does not make a recipe source available', () => {
+  assert.equal(
+    hasRetrievableRecipeSource({ activeDatasetCount: 0, enabledPersonalRecipeCount: 0 }),
+    false,
+  );
+});
+
+test('an enabled DatasetPack or personal recipe makes a recipe source available', () => {
+  assert.equal(hasRetrievableRecipeSource({ activeDatasetCount: 1, enabledPersonalRecipeCount: 0 }), true);
+  assert.equal(hasRetrievableRecipeSource({ activeDatasetCount: 0, enabledPersonalRecipeCount: 1 }), true);
 });

@@ -23,7 +23,7 @@ type ConfirmDialogState = {
   onConfirm: () => void;
 } | null;
 
-export function ApiKeySettingsScreen({ navigation }: ApiKeySettingsScreenProps) {
+export function ApiKeySettingsScreen({ navigation, route }: ApiKeySettingsScreenProps) {
   useCredentialCaptureProtection();
   const { language, t } = useI18n();
   const { colors: appColors } = useAppTheme();
@@ -130,6 +130,13 @@ export function ApiKeySettingsScreen({ navigation }: ApiKeySettingsScreenProps) 
       setSavedApiKeyValue(key);
       setSavedKey(true);
       showFeedback({ tone: 'success', title: t('settings.connectionSuccess'), message: t('common.gemini') });
+      // A setup step that sent the user here expects them back once the key passes. The key is
+      // already saved, but `hasUnsavedApiKey` still reads stale this tick, so the unsaved-changes
+      // guard would prompt about a draft that no longer exists. Skip it deliberately.
+      if (route.params?.returnAfterVerified && navigation.canGoBack()) {
+        skipUnsavedApiKeyPromptRef.current = true;
+        navigation.goBack();
+      }
     } catch (error) {
       showFeedback({ tone: 'error', title: t('settings.connectionFailed'), message: formatError(error, t) });
     } finally {

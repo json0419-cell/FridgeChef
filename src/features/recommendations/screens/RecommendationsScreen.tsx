@@ -9,6 +9,7 @@ import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { getActionAccessibilityState } from '../../../shared/components/control-state';
 import { InstalledSourceRecoveryCard } from '../../../shared/components/InstalledSourceRecoveryCard';
+import { ProgressRing } from '../../../shared/components/ProgressRing';
 import {
   RecommendationRefinerError,
   refineRagRecommendationsWithProvider,
@@ -124,6 +125,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [modelDownloading, setModelDownloading] = useState(false);
   const [registryDiagnostic, setRegistryDiagnostic] = useState<InstalledSourceDiagnostic | null>(null);
   const [modelProgress, setModelProgress] = useState<ModelDownloadProgress | null>(null);
+  const modelDownloadingRef = useRef(false);
   const [readiness, setReadiness] = useState<RecommendationReadiness>(EMPTY_READINESS);
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [cachePresentation, setCachePresentation] = useState<CachePresentation>(null);
@@ -651,17 +653,28 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   );
 
   const installOnnxModel = async () => {
+    // The pack shares one staging directory, so a second concurrent run would corrupt the first.
+    if (modelDownloadingRef.current) {
+      showFeedback({ tone: 'info', title: t('recommendations.modelDownloadingTitle'), message: t('recommendations.modelDownloadingBody') });
+      return;
+    }
+
+    modelDownloadingRef.current = true;
     setModelDownloading(true);
     setModelProgress(null);
+    // The pack is multi-gigabyte, so the tap needs an answer before the first progress event lands.
+    showFeedback({ tone: 'info', title: t('recommendations.modelDownloadStartedTitle'), message: t('recommendations.modelDownloadStartedBody') });
     try {
       await downloadEmbeddingModelPack(undefined, setModelProgress);
       await refreshReadiness();
     } catch (error) {
-      if (!(error instanceof InstalledSourceRegistryError)) {
-        throw error;
+      if (error instanceof InstalledSourceRegistryError) {
+        setRegistryDiagnostic(createInstalledSourceDiagnostic(error));
+      } else {
+        showFeedback({ tone: 'error', title: t('recommendations.modelInstallFailed'), message: formatError(error, t) });
       }
-      setRegistryDiagnostic(createInstalledSourceDiagnostic(error));
     } finally {
+      modelDownloadingRef.current = false;
       setModelDownloading(false);
       setModelProgress(null);
     }
@@ -767,9 +780,11 @@ export function RecommendationsScreen({ navigation, route }: Props) {
               loading={readinessLoading}
               readiness={readiness}
               onOpenConsent={() => navigation.navigate('PrivacyPolicy', { returnAfterConsent: true })}
-              onOpenCredential={() => navigation.navigate('ApiKeySettings')}
+              onOpenCredential={() => navigation.navigate('ApiKeySettings', { returnAfterVerified: true })}
               onOpenModel={() => void installOnnxModel()}
               onOpenSource={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
+              modelDownloading={modelDownloading}
+              modelProgress={modelProgress}
               t={t}
             />
             <View style={styles.modeRow}>
@@ -893,7 +908,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
                     <ActionButton title={t('recommendations.downloadModel')} onPress={installOnnxModel} loading={modelDownloading} />
                     {modelProgress ? (
                       <Text style={styles.noticeText}>
-                        {modelProgress.fileName} · {modelProgress.completedFiles}/{modelProgress.totalFiles} {t('common.files')} ·{' '}
+                        {formatModelDownloadStatus(modelProgress, t)} · {modelProgress.fileName} ·{' '}
                         {formatBytes(modelProgress.completedBytes)} / {formatBytes(modelProgress.totalBytes)}
                       </Text>
                     ) : null}
@@ -1022,6 +1037,8 @@ function ReadinessChecklist({
   onOpenCredential,
   onOpenModel,
   onOpenSource,
+  modelDownloading,
+  modelProgress,
   t,
 }: {
   loading: boolean;
@@ -1030,14 +1047,22 @@ function ReadinessChecklist({
   onOpenCredential: () => void;
   onOpenModel: () => void;
   onOpenSource: () => void;
+  modelDownloading: boolean;
+  modelProgress: ModelDownloadProgress | null;
   t: TFunction;
 }) {
   const { colors: appColors } = useAppTheme();
   const styles = useRecommendationStyles();
+  const modelDownloadPercent = readModelDownloadPercent(modelProgress);
+
+  if (readiness.ready) {
+    return null;
+  }
+
   const items = [
     { key: 'consent', label: t('recommendations.readinessConsent'), ready: readiness.consentReady, onPress: onOpenConsent },
     { key: 'credential', label: t('recommendations.readinessCredential'), ready: readiness.credentialReady, onPress: onOpenCredential },
-    { key: 'model', label: t('recommendations.readinessModel'), ready: readiness.modelReady, onPress: onOpenModel },
+    { key: 'model', label: t('recommendations.readinessModel'), ready: readiness.modelReady, onPress: onOpenModel, busy: modelDownloading, busyStatus: formatModelDownloadStatus(modelProgress, t) },
     { key: 'source', label: t('recommendations.readinessSource'), ready: readiness.sourceReady, onPress: onOpenSource },
   ];
 
@@ -1046,28 +1071,31 @@ function ReadinessChecklist({
       <View style={styles.readinessHeader}>
         <View style={styles.readinessTitleBlock}>
           <Text accessibilityRole="header" style={styles.readinessTitle}>{t('recommendations.readinessTitle')}</Text>
-          <Text style={styles.readinessDetail}>
-            {readiness.ready
-              ? t('recommendations.readinessComplete')
-              : t('recommendations.readinessIncomplete')}
-          </Text>
+          <Text style={styles.readinessDetail}>{t('recommendations.readinessIncomplete')}</Text>
         </View>
         {loading ? <ActivityIndicator color={appColors.primary} size="small" /> : null}
       </View>
       <View style={styles.readinessList}>
         {items.map((item) => {
-          const status = item.ready ? t('recommendations.readinessReady') : t('recommendations.readinessRequired');
+          const busy = Boolean(item.busy);
+          const status = busy
+            ? item.busyStatus ?? t('recommendations.readinessDownloading')
+            : item.ready
+              ? t('recommendations.readinessReady')
+              : t('recommendations.readinessRequired');
           const label = `${item.label}. ${status}`;
           const content = (
             <>
-              {item.ready ? (
+              {busy ? (
+                <ProgressRing percent={modelDownloadPercent} size={21} />
+              ) : item.ready ? (
                 <CheckCircle2 color={appColors.primary} size={21} strokeWidth={2.2} />
               ) : (
                 <Circle color={appColors.textTertiary} size={21} strokeWidth={2} />
               )}
               <Text style={[styles.readinessLabel, item.ready && styles.readinessLabelReady]}>{item.label}</Text>
               <Text style={styles.readinessStatus}>{status}</Text>
-              {!item.ready ? <ChevronRight color={appColors.textTertiary} size={19} strokeWidth={2} /> : null}
+              {!item.ready && !busy ? <ChevronRight color={appColors.textTertiary} size={19} strokeWidth={2} /> : null}
             </>
           );
 
@@ -1083,8 +1111,8 @@ function ReadinessChecklist({
             <Pressable
               accessibilityLabel={label}
               accessibilityRole="button"
-              accessibilityState={getActionAccessibilityState({ loading })}
-              disabled={loading}
+              accessibilityState={getActionAccessibilityState({ loading: loading || busy })}
+              disabled={loading || busy}
               key={item.key}
               onPress={item.onPress}
               style={({ pressed }) => [styles.readinessRow, pressed && styles.readinessRowPressed]}
@@ -1094,6 +1122,33 @@ function ReadinessChecklist({
           );
         })}
       </View>
+      {modelDownloading ? (
+        <View style={styles.modelDownloadPanel}>
+          <ProgressRing
+            accessibilityLabel={formatModelDownloadStatus(modelProgress, t)}
+            percent={modelDownloadPercent}
+            showLabel
+            size={56}
+            strokeWidth={5}
+          />
+          <View style={styles.modelDownloadDetail}>
+            <Text style={styles.modelDownloadTitle}>{t(modelPhaseLabelKey(modelProgress?.phase))}</Text>
+            <Text style={styles.modelDownloadText}>
+              {modelProgress
+                ? `${modelProgress.fileName} · ${modelProgress.completedFiles}/${modelProgress.totalFiles} ${t('common.files')}`
+                : t('recommendations.modelDownloadPreparing')}
+            </Text>
+            {modelProgress ? (
+              <Text style={styles.modelDownloadText}>
+                {formatBytes(modelProgress.completedBytes)} / {formatBytes(modelProgress.totalBytes)}
+              </Text>
+            ) : null}
+            {modelProgress?.phase === 'runtime' ? (
+              <Text style={styles.modelDownloadText}>{t('recommendations.modelPhaseSlowHint')}</Text>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
     </AppCard>
   );
 }
@@ -1452,6 +1507,35 @@ function formatGeminiRecommendationError(error: unknown, t: TFunction) {
   return t('recommendations.geminiProviderFailed', { message });
 }
 
+function readModelDownloadPercent(progress: ModelDownloadProgress | null) {
+  if (!progress || progress.phaseRatio === null) {
+    return null;
+  }
+
+  return Math.min(100, Math.max(0, Math.floor(progress.phaseRatio * 100)));
+}
+
+function modelPhaseLabelKey(phase: ModelDownloadProgress['phase'] | undefined) {
+  switch (phase) {
+    case 'verify':
+      return 'recommendations.modelPhaseVerify';
+    case 'runtime':
+      return 'recommendations.modelPhaseRuntime';
+    default:
+      return 'recommendations.modelPhaseDownload';
+  }
+}
+
+function formatModelDownloadStatus(progress: ModelDownloadProgress | null, t: TFunction) {
+  const phaseLabel = t(modelPhaseLabelKey(progress?.phase));
+  const percent = readModelDownloadPercent(progress);
+  // Hashing and the ONNX load run for minutes with no byte count, so they say so rather than
+  // leaving the last reported download percentage on screen.
+  return percent === null
+    ? t('recommendations.readinessPhasePending', { phase: phaseLabel })
+    : t('recommendations.readinessPhasePercent', { phase: phaseLabel, percent });
+}
+
 function formatBytes(bytes: number) {
   if (bytes >= 1024 * 1024 * 1024) {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
@@ -1592,6 +1676,29 @@ function createStyles(appColors: AppColorTokens) {
   readinessStatus: {
     color: appColors.textSecondary,
     fontSize: 13,
+  },
+  modelDownloadPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: appColors.border,
+  },
+  modelDownloadDetail: {
+    flex: 1,
+    gap: 2,
+  },
+  modelDownloadTitle: {
+    color: appColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: typography.strong,
+  },
+  modelDownloadText: {
+    color: appColors.textSecondary,
+    fontSize: 12,
   },
   textAction: {
     minHeight: 48,

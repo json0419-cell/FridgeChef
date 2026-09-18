@@ -42,8 +42,7 @@ export async function downloadDatasetPack(
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Dataset manifest URL').toString();
   const manifest = await fetchDatasetManifest(normalizedManifestUrl);
   // Read the registry before touching files so an unreadable registry refuses the install up front.
-  const existingDatasets = await listInstalledDatasets();
-  const existingDataset = existingDatasets.find((item) => item.id === manifest.id);
+  await listInstalledDatasets();
 
   const root = getDatasetsRootDirectory();
   ensureDirectory(root);
@@ -135,7 +134,10 @@ export async function downloadDatasetPack(
       stagingDirectory.uri,
       localManifestFile.uri,
       normalizedManifestUrl,
-      existingDataset?.active ?? false,
+      // A pack the user just chose to download is a pack they want to retrieve from, so it is
+      // enabled on arrival rather than left as an inert download. The registry keeps a single
+      // active pack, so this replaces the previously active one.
+      true,
     );
     await saveInstalledDataset(installed);
 
