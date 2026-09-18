@@ -410,7 +410,7 @@ describe('application navigation behavior', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Home' }));
     await screen.findByRole('button', { name: 'Get recipe recommendations' });
     await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
-    await screen.findByText('Recommendation Ready');
+    await screen.findByText('What style do you want this time?');
     await act(async () => undefined);
 
     expect(getRagRecommendations).toHaveBeenCalledTimes(1);
@@ -455,7 +455,7 @@ describe('application navigation behavior', () => {
 
     const screen = await render(<App />);
 
-    await screen.findByText('Recommendation Ready');
+    await screen.findByText('What style do you want this time?');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Recipe Recommendations' }).props.accessibilityState).toEqual({ selected: true }));
     expect(getRagRecommendations).not.toHaveBeenCalled();
     expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
@@ -611,6 +611,15 @@ describe('application navigation behavior', () => {
     expect(screen.getByRole('button', { name: 'Ask Gemini to replace this recommendation: Tomato supper' })).toBeTruthy();
   });
 
+  it('hides the readiness checklist once every requirement is met', async () => {
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+
+    await screen.findByText('What style do you want this time?');
+    expect(screen.queryByText('Recommendation Ready')).toBeNull();
+    expect(screen.queryByText('Complete these items before generating a new batch.')).toBeNull();
+  });
+
   it('reads completed readiness as status and incomplete readiness as an action', async () => {
     jest.mocked(loadRecommendationReadiness).mockResolvedValue({
       consentReady: true,
@@ -623,6 +632,7 @@ describe('application navigation behavior', () => {
     const screen = await render(<App />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
 
+    expect(await screen.findByText('Recommendation Ready')).toBeTruthy();
     const action = await screen.findByRole('button', { name: 'Save and test the Gemini API key. Set up' });
     await waitFor(() => expect(action.props.accessibilityState).toEqual({ busy: false, disabled: false }));
     expect(screen.queryByRole('button', { name: /Agree to the AI data disclosure/ })).toBeNull();

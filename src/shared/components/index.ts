@@ -13,5 +13,6 @@ export {
   StatusBadge,
   TopLevelHeader,
 } from './Foundation';
+export { ProgressRing } from './ProgressRing';
 export { Screen } from './Screen';
 export { InstalledSourceRecoveryCard } from './InstalledSourceRecoveryCard';

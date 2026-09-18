@@ -1,8 +1,8 @@
-import { fetch as expoFetch } from 'expo/fetch';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import type { EmbeddingModelPackFile, EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
 import { calculateFileSha256 } from '../../downloads/file-integrity';
-import { nextByteRange, validateRangeResponse } from '../../downloads/http-range';
+import { nextByteRange } from '../../downloads/http-range';
+import { createSingleFlight } from '../../downloads/single-flight';
 import {
   assertHttpsUrl,
   isChildUri,
@@ -29,18 +29,35 @@ export const OFFICIAL_BGE_M3_MODEL_PACK_URL =
   'https://huggingface.co/datasets/Yatorou/ChiShenMe/resolve/main/models/bge-m3-query-onnx/model-pack.json';
 
 const MAX_MANIFEST_CHARACTERS = 1024 * 1024;
-const RANGE_CHUNK_BYTES = 16 * 1024 * 1024;
-const RANGE_REQUEST_TIMEOUT_MS = 90_000;
-const MAX_RANGE_ATTEMPTS = 3;
+const PREFLIGHT_TIMEOUT_MS = 30_000;
+const MAX_DOWNLOAD_ATTEMPTS = 3;
+// Bytes moved per read when a resumed range is appended. The model pack is measured in gigabytes,
+// so nothing here may scale with the file size.
+const COPY_BUFFER_BYTES = 1024 * 1024;
+const PART_FILE_SUFFIX = '.part';
 const DOWNLOAD_STATE_NAME = '.model-download-state.json';
 
+/**
+ * `verify` hashes a finished file and `runtime` loads it into ONNX Runtime. Both take minutes on a
+ * multi-gigabyte pack, so they report separately instead of leaving the download stuck near 100%.
+ */
+export type ModelDownloadPhase = 'download' | 'verify' | 'runtime';
+
 export interface ModelDownloadProgress {
+  phase: ModelDownloadPhase;
   fileRole: string;
   fileName: string;
   completedFiles: number;
   totalFiles: number;
   completedBytes: number;
   totalBytes: number;
+  /** Completion of the active phase from 0 to 1, or `null` when the phase cannot be measured. */
+  phaseRatio: number | null;
+}
+
+interface ModelFileProgressReporter {
+  onDownloaded: (writtenBytes: number) => void;
+  onVerified: (hashedBytes: number) => void;
 }
 
 interface ModelDownloadState {
@@ -48,11 +65,30 @@ interface ModelDownloadState {
   resumeKey: string;
 }
 
-export async function downloadEmbeddingModelPack(
+const runExclusiveDownload = createSingleFlight<InstalledEmbeddingModel>();
+
+/**
+ * Concurrent calls for the same manifest join the running download instead of starting a second one
+ * that would append into the same staging files.
+ */
+export function downloadEmbeddingModelPack(
   manifestUrl = OFFICIAL_BGE_M3_MODEL_PACK_URL,
   onProgress?: (progress: ModelDownloadProgress) => void,
 ): Promise<InstalledEmbeddingModel> {
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Model manifest URL').toString();
+  return runExclusiveDownload(normalizedManifestUrl, () =>
+    installEmbeddingModelPack(normalizedManifestUrl, onProgress),
+  );
+}
+
+export function isEmbeddingModelPackDownloading(manifestUrl = OFFICIAL_BGE_M3_MODEL_PACK_URL) {
+  return runExclusiveDownload.isRunning(assertHttpsUrl(manifestUrl, 'Model manifest URL').toString());
+}
+
+async function installEmbeddingModelPack(
+  normalizedManifestUrl: string,
+  onProgress?: (progress: ModelDownloadProgress) => void,
+): Promise<InstalledEmbeddingModel> {
   const manifest = await fetchEmbeddingModelManifest(normalizedManifestUrl);
   // Read the registry before touching files so an unreadable registry refuses the install up front.
   const existingModels = await listInstalledEmbeddingModels();
@@ -75,26 +111,38 @@ export async function downloadEmbeddingModelPack(
       const entry = manifest.files[index];
       const destination = fileForRelativePath(stagingDirectory, entry.path);
       const remoteUrl = resolveSecurePackFileUrl(normalizedManifestUrl, entry, 'Model pack');
-
-      const fileBytes = await downloadAndVerifyModelFile(entry, remoteUrl, destination, (writtenBytes) => {
+      const report = (phase: ModelDownloadPhase, fileBytes: number, phaseRatio: number | null) => {
         onProgress?.({
+          phase,
           fileRole: entry.role,
           fileName: entry.path,
           completedFiles: index,
           totalFiles: manifest.files.length,
-          completedBytes: completedBytes + writtenBytes,
+          completedBytes: completedBytes + fileBytes,
           totalBytes,
+          phaseRatio,
         });
+      };
+
+      const fileBytes = await downloadAndVerifyModelFile(entry, remoteUrl, destination, {
+        onDownloaded: (writtenBytes) => {
+          report('download', writtenBytes, totalBytes > 0 ? (completedBytes + writtenBytes) / totalBytes : null);
+        },
+        onVerified: (hashedBytes) => {
+          report('verify', entry.sizeBytes, entry.sizeBytes > 0 ? hashedBytes / entry.sizeBytes : null);
+        },
       });
 
       completedBytes += fileBytes;
       onProgress?.({
+        phase: 'download',
         fileRole: entry.role,
         fileName: entry.path,
         completedFiles: index + 1,
         totalFiles: manifest.files.length,
         completedBytes,
         totalBytes,
+        phaseRatio: totalBytes > 0 ? completedBytes / totalBytes : null,
       });
     }
 
@@ -118,6 +166,16 @@ export async function downloadEmbeddingModelPack(
       normalizedManifestUrl,
       existingModel?.active ?? existingModels.length === 0,
     );
+    onProgress?.({
+      phase: 'runtime',
+      fileRole: 'modelOnnx',
+      fileName: manifest.id,
+      completedFiles: manifest.files.length,
+      totalFiles: manifest.files.length,
+      completedBytes: totalBytes,
+      totalBytes,
+      phaseRatio: null,
+    });
     await verifyEmbeddingModelRuntime(installedCandidate);
     const installed: InstalledEmbeddingModel = {
       ...installedCandidate,
@@ -193,9 +251,14 @@ async function downloadAndVerifyModelFile(
   entry: EmbeddingModelPackFile,
   remoteUrl: string,
   destination: File,
-  onProgress: (writtenBytes: number) => void,
+  report: ModelFileProgressReporter,
 ): Promise<number> {
+  const onProgress = report.onDownloaded;
   const expectedSha256 = normalizeSha256(entry.sha256, entry.path);
+  const partFile = new File(destination.parentDirectory, `${destination.name}${PART_FILE_SUFFIX}`);
+  // A leftover part file records no offset of its own, so it can never be appended blindly.
+  removeFileIfPresent(partFile);
+
   let existingBytes = readExistingFileSize(destination);
 
   if (existingBytes > entry.sizeBytes) {
@@ -204,7 +267,7 @@ async function downloadAndVerifyModelFile(
   }
 
   if (existingBytes === entry.sizeBytes) {
-    const existingSha256 = await calculateFileSha256(destination, existingBytes);
+    const existingSha256 = await calculateFileSha256(destination, existingBytes, report.onVerified);
     if (existingSha256 === expectedSha256) {
       onProgress(existingBytes);
       return existingBytes;
@@ -213,18 +276,39 @@ async function downloadAndVerifyModelFile(
     existingBytes = 0;
   }
 
-  if (!destination.exists) {
-    destination.create({ intermediates: true });
-  }
-
   let offset = existingBytes;
   onProgress(offset);
+
+  let attemptsWithoutProgress = 0;
+  let lastError: unknown = null;
+
   while (offset < entry.sizeBytes) {
-    const range = nextByteRange(offset, entry.sizeBytes, RANGE_CHUNK_BYTES);
-    const bytes = await fetchRangeChunk(remoteUrl, range.start, range.end, entry.sizeBytes);
-    appendBytes(destination, bytes);
-    offset += bytes.byteLength;
+    if (attemptsWithoutProgress >= MAX_DOWNLOAD_ATTEMPTS) {
+      throw lastError instanceof Error ? lastError : new Error(`模型文件下载失败：${entry.path}`);
+    }
+
+    const offsetBeforeAttempt = offset;
+    try {
+      offset = await downloadRemainingBytes(entry, remoteUrl, destination, partFile, offset, onProgress);
+    } catch (error) {
+      lastError = error;
+      removeFileIfPresent(partFile);
+      if (!isRetryableDownloadError(error)) {
+        throw error;
+      }
+
+      // Bytes streamed into the destination before the failure stay on disk and are resumed.
+      offset = readExistingFileSize(destination);
+    }
+
     onProgress(offset);
+    if (offset > offsetBeforeAttempt) {
+      attemptsWithoutProgress = 0;
+      continue;
+    }
+
+    attemptsWithoutProgress += 1;
+    await delay(500 * 2 ** (attemptsWithoutProgress - 1));
   }
 
   const info = destination.info();
@@ -232,7 +316,7 @@ async function downloadAndVerifyModelFile(
     throw new Error(`模型文件大小不匹配：${entry.path}`);
   }
 
-  const actualSha256 = await calculateFileSha256(destination, entry.sizeBytes);
+  const actualSha256 = await calculateFileSha256(destination, entry.sizeBytes, report.onVerified);
   if (actualSha256 !== expectedSha256) {
     destination.delete();
     throw new Error(`模型文件 SHA-256 校验失败，已删除损坏文件：${entry.path}`);
@@ -241,54 +325,106 @@ async function downloadAndVerifyModelFile(
   return entry.sizeBytes;
 }
 
-async function fetchRangeChunk(url: string, start: number, end: number, totalBytes: number): Promise<Uint8Array> {
-  let lastError: unknown = null;
+/**
+ * Streams the bytes after `offset` to disk and returns the new destination size.
+ *
+ * `File.downloadFileAsync` writes the response body straight into the file with a small native
+ * buffer. Nothing proportional to the transfer is held in memory, which `expo/fetch` cannot offer
+ * because it queues the whole body before handing it to JS.
+ */
+async function downloadRemainingBytes(
+  entry: EmbeddingModelPackFile,
+  remoteUrl: string,
+  destination: File,
+  partFile: File,
+  offset: number,
+  onProgress: (writtenBytes: number) => void,
+): Promise<number> {
+  const range = nextByteRange(offset, entry.sizeBytes, entry.sizeBytes - offset);
+  const remainingBytes = range.end - range.start + 1;
+  const resolvedUrl = await resolveFinalFileUrl(remoteUrl, entry);
 
-  for (let attempt = 1; attempt <= MAX_RANGE_ATTEMPTS; attempt += 1) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), RANGE_REQUEST_TIMEOUT_MS);
+  // A fresh file is streamed straight to its destination; a resumed one lands beside it so the
+  // bytes already on disk are never overwritten.
+  const streamsToDestination = offset === 0;
+  const target = streamsToDestination ? destination : partFile;
+  removeFileIfPresent(target);
 
-    try {
-      const response = await expoFetch(url, {
-        headers: { Range: `bytes=${start}-${end}` },
-        signal: controller.signal,
-      });
-      assertHttpsUrl(response.url || url, 'Model file 最终 URL');
+  const controller = new AbortController();
+  let exceededRange = false;
 
-      if (isRetryableStatus(response.status) && attempt < MAX_RANGE_ATTEMPTS) {
-        await response.body?.cancel();
-        await delay(500 * 2 ** (attempt - 1));
-        continue;
-      }
+  try {
+    await File.downloadFileAsync(resolvedUrl, target, {
+      headers: { Range: `bytes=${range.start}-${range.end}` },
+      idempotent: true,
+      signal: controller.signal,
+      onProgress: (event) => {
+        if (event.bytesWritten > remainingBytes || (event.totalBytes > 0 && event.totalBytes > remainingBytes)) {
+          // The server ignored the Range header and is replaying bytes we already hold.
+          exceededRange = true;
+          controller.abort();
+          return;
+        }
 
-      if (response.status === 200 && (start !== 0 || end !== totalBytes - 1)) {
-        await response.body?.cancel();
-        throw new Error('下载服务器不支持安全的断点续传。');
-      }
-
-      if (response.status !== 200 && response.status !== 206) {
-        await response.body?.cancel();
-        throw new Error(`模型分块下载失败 (${response.status})。`);
-      }
-
-      const bytes = await response.bytes();
-      validateRangeResponse(response.status, response.headers.get('content-range'), { start, end }, totalBytes, bytes.byteLength);
-      return bytes;
-    } catch (error) {
-      lastError = error;
-      if (attempt >= MAX_RANGE_ATTEMPTS || !isRetryableDownloadError(error)) {
-        break;
-      }
-      await delay(500 * 2 ** (attempt - 1));
-    } finally {
-      clearTimeout(timeoutId);
+        onProgress(offset + Math.max(0, event.bytesWritten));
+      },
+    });
+  } catch (error) {
+    if (exceededRange) {
+      throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
     }
+    throw error;
   }
 
-  if (isAbortError(lastError)) {
-    throw new Error(`模型分块下载超时（${start}-${end}）。`);
+  if (exceededRange) {
+    throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
   }
-  throw lastError instanceof Error ? lastError : new Error('模型分块下载失败。');
+
+  if (streamsToDestination) {
+    return readExistingFileSize(destination);
+  }
+
+  const partBytes = readExistingFileSize(partFile);
+  if (partBytes > remainingBytes) {
+    removeFileIfPresent(partFile);
+    throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
+  }
+
+  appendFileContents(destination, partFile);
+  removeFileIfPresent(partFile);
+  return readExistingFileSize(destination);
+}
+
+/**
+ * Resolves redirects up front so the transfer starts from a URL this app has checked.
+ *
+ * A failed preflight falls back to the manifest URL, which `resolveSecurePackFileUrl` already
+ * asserted is HTTPS; every byte is still covered by the SHA-256 check before the model is used.
+ */
+async function resolveFinalFileUrl(remoteUrl: string, entry: EmbeddingModelPackFile): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PREFLIGHT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(remoteUrl, { method: 'HEAD', signal: controller.signal });
+    if (!response.ok) {
+      return remoteUrl;
+    }
+
+    const declaredLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredLength) && declaredLength > 0 && declaredLength !== entry.sizeBytes) {
+      throw new Error(`模型文件大小与 manifest 声明不一致：${entry.path}`);
+    }
+
+    return assertHttpsUrl(response.url || remoteUrl, 'Model file 最终 URL').toString();
+  } catch (error) {
+    if (isAbortError(error) || error instanceof TypeError) {
+      return remoteUrl;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function prepareStagingDirectory(
@@ -387,12 +523,22 @@ function fileForRelativePath(root: Directory, relativePath: string) {
   return file;
 }
 
-function appendBytes(file: File, bytes: Uint8Array) {
-  const handle = file.open(FileMode.Append);
+function appendFileContents(destination: File, source: File) {
+  const reader = source.open(FileMode.ReadOnly);
+  const writer = destination.open(FileMode.Append);
+
   try {
-    handle.writeBytes(bytes);
+    for (;;) {
+      const bytes = reader.readBytes(COPY_BUFFER_BYTES);
+      if (bytes.byteLength === 0) {
+        break;
+      }
+
+      writer.writeBytes(bytes);
+    }
   } finally {
-    handle.close();
+    reader.close();
+    writer.close();
   }
 }
 
@@ -434,16 +580,13 @@ function sanitizePathSegment(value: string) {
 }
 
 
-function isRetryableStatus(status: number) {
-  return status === 408 || status === 429 || status >= 500;
-}
-
 function isRetryableDownloadError(error: unknown) {
   if (isAbortError(error)) {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return !/不支持安全的断点续传|无效的 Content-Range|拒绝|SHA-256/.test(message);
+  // A server that contradicts the manifest will keep contradicting it, so those errors are final.
+  return !/不支持安全的断点续传|无效的 Content-Range|manifest 声明不一致|拒绝|SHA-256/.test(message);
 }
 
 function isAbortError(error: unknown) {

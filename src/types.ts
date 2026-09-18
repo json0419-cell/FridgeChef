@@ -187,7 +187,7 @@ export interface InstalledDataset {
 }
 
 export interface EmbeddingModelPackFile {
-  role: 'modelOnnx' | 'externalData' | 'tokenizerOnnx' | 'config' | string;
+  role: 'modelOnnx' | 'externalData' | 'tokenizerJson' | 'sentencepiece' | 'config' | string;
   path: string;
   url?: string;
   sizeBytes: number;
@@ -342,7 +342,7 @@ export type MainTabParamList = {
 export type RootNativeStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Settings: undefined;
-  ApiKeySettings: undefined;
+  ApiKeySettings: { returnAfterVerified?: boolean } | undefined;
   DataManagement: undefined;
   PrivacyPolicy: { returnAfterConsent?: boolean } | undefined;
 };
