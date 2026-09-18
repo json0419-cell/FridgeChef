@@ -1,3 +1,7 @@
+import type { CompositeScreenProps, NavigatorScreenParams, RouteProp } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 export type IngredientSource = 'manual' | 'photo';
 
 export interface Ingredient {
@@ -223,6 +227,7 @@ export interface InstalledEmbeddingModel {
   modelName: string;
   dimension: number;
   maxLength: number;
+  testEmbeddingVerifiedAt?: string;
 }
 
 export interface VectorSearchResult {
@@ -276,16 +281,102 @@ export interface CookedRecipeHistory {
   cookedAt: string;
 }
 
-export type RootStackParamList = {
+export type AddIngredientParams = { ingredientId?: string; mode?: 'manual' | 'photo' } | undefined;
+export type RecipeDetailParams = {
+  recipeId: string;
+  source?: 'official' | 'personal';
+  libraryId?: string;
+};
+
+export type HomeStackParamList = {
   Home: undefined;
-  AddIngredient: { ingredientId?: string; mode?: 'manual' | 'photo' } | undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type FridgeStackParamList = {
+  Fridge: undefined;
+  AddIngredient: AddIngredientParams;
   ConfirmRecognizedFood: { items: RecognizedFoodItem[] };
-  Recommendations: undefined;
-  RecipeDetail: { recipeId: string };
-  History: undefined;
-  Settings: undefined;
+};
+
+export type RecipesStackParamList = {
   DatasetLibrary: undefined;
   UserRecipeLibraries: undefined;
   UserRecipeLibraryDetail: { libraryId: string };
   AddUserRecipe: { libraryId?: string; recipeId?: string } | undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type HistoryStackParamList = {
+  History: undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type RecommendationsStackParamList = {
+  Recommendations:
+    | {
+        focusRecommendationId?: string;
+        generationRequestId?: string;
+      }
+    | undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type MyStackParamList = {
+  My: undefined;
+  DatasetLibrary: undefined;
+  UserRecipeLibraries: undefined;
+  UserRecipeLibraryDetail: { libraryId: string };
+  AddUserRecipe: { libraryId?: string; recipeId?: string } | undefined;
+  History: undefined;
+  RecipeDetail: RecipeDetailParams;
+};
+
+export type MainTabParamList = {
+  HomeStack: NavigatorScreenParams<HomeStackParamList> | undefined;
+  FridgeStack: NavigatorScreenParams<FridgeStackParamList> | undefined;
+  RecommendationsStack: NavigatorScreenParams<RecommendationsStackParamList> | undefined;
+  MyStack: NavigatorScreenParams<MyStackParamList> | undefined;
+};
+
+export type RootNativeStackParamList = {
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
+  Settings: undefined;
+  ApiKeySettings: undefined;
+  DataManagement: undefined;
+  PrivacyPolicy: { returnAfterConsent?: boolean } | undefined;
+};
+
+export type RootStackParamList = RootNativeStackParamList;
+
+export type HomeStackScreenProps<T extends keyof HomeStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<HomeStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'HomeStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+>;
+
+export type FridgeStackScreenProps<T extends keyof FridgeStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<FridgeStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'FridgeStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+>;
+
+export type RecommendationsStackScreenProps<T extends keyof RecommendationsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<RecommendationsStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'RecommendationsStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+>;
+
+export type MyStackScreenProps<T extends keyof MyStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<MyStackParamList, T>,
+  CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'MyStack'>, NativeStackScreenProps<RootNativeStackParamList>>
+>;
+
+export type RecipesStackScreenProps<T extends keyof RecipesStackParamList> = MyStackScreenProps<T>;
+
+export type HistoryStackScreenProps<T extends keyof HistoryStackParamList> = MyStackScreenProps<T>;
+
+export type SettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'Settings'>;
+export type ApiKeySettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'ApiKeySettings'>;
+export type PrivacyPolicyScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'PrivacyPolicy'>;
+
+export type RecipeDetailScreenProps = {
+  route: RouteProp<{ RecipeDetail: RecipeDetailParams }, 'RecipeDetail'>;
 };

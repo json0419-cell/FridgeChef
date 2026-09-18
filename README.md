@@ -1,173 +1,257 @@
-﻿# FridgeChef / 是啊！吃什么
+# 是啊！吃什么 / FridgeChef
 
-[English](#english) | [中文](#中文)
+> 根据冰箱里的食材、自己的菜谱库和当前口味，帮你决定今天吃什么。
+
+[中文说明](#这个软件是什么) · [English overview](#english-overview) · [隐私政策](PRIVACY.md) · [数据包格式](docs/dataset-pack-v1.md) · [ONNX RAG](docs/onnx-rag.md)
+
+“是啊！吃什么”是一款 Android 优先、本地优先的智能菜谱应用。它不是单纯展示一张菜谱列表，而是把用户已有的食材、启用的菜谱库、最近做过的菜和本次口味要求组合起来，先在手机上检索合适的候选菜谱，再由 Gemini 整理成更容易直接照着做的方案。
+
+<p align="center">
+  <img src="store-listing/default/phone-01-home-1080x1920.png" width="22%" alt="首页" />
+  <img src="store-listing/default/phone-02-recommendations-1080x1920.png" width="22%" alt="推荐结果" />
+  <img src="store-listing/default/phone-03-add-ingredients-1080x1920.png" width="22%" alt="添加食材" />
+  <img src="store-listing/default/phone-04-libraries-1080x1920.png" width="22%" alt="菜谱库" />
+</p>
+
+## 这个软件是什么
+
+很多时候，用户并不缺菜谱，而是缺少一个能结合当前情况做决定的工具：冰箱里只剩这些东西、今晚只有半小时、不想吃辣、最近已经吃过同一道菜——这时到底做什么？
+
+FridgeChef 围绕这个问题提供一条完整流程：
+
+```text
+冰箱食材 + 人数/时间/忌口 + 本次口味 + 最近做饭记录
+                            │
+                            ▼
+             手机本地检索已启用的菜谱库
+          ┌─────────────────┴─────────────────┐
+          │                                   │
+  预向量化官方 DatasetPack           用户自己的菜谱库
+  BGE-M3 查询向量 + topK             本机向量缓存 / 文本回退
+          └─────────────────┬─────────────────┘
+                            ▼
+                    得到候选菜谱
+                            ▼
+          用户同意后，由 Gemini 过滤并整理步骤
+                            ▼
+                   可直接执行的做饭方案
+```
+
+如果本地 ONNX 模型还没有安装或当前设备无法运行，应用仍可回退到本地文本检索；如果用户没有输入食材，也可以从启用的菜谱库中生成随机灵感。
+
+## 主要功能
+
+- **冰箱食材管理**：手动添加、编辑和删除食材，也可以拍照后让 Gemini 识别。
+- **本地菜谱检索**：根据食材、人数、最长时间、难度、忌口和临时口味标签检索候选菜谱。
+- **官方菜谱库**：下载安装已经生成好 BGE-M3 向量的 DatasetPack，不需要在手机上重新向量化全部官方数据。
+- **我的菜谱库**：新建不同主题的私人菜谱库，手动录入菜谱，或从 YouTube 链接生成菜谱草稿。
+- **个人菜谱向量化**：安装 ONNX 模型后，个人菜谱可在本机按需生成并缓存 embedding；模型不可用时使用文本匹配。
+- **Gemini 推荐整理**：过滤无效候选，结合用户要求补充匹配理由、缺少食材和清晰步骤。
+- **最近做过的菜**：记录烹饪历史，并在一段时间内减少重复推荐。
+- **中英文界面**：默认跟随系统语言，也可以在设置中固定为中文或英文。
+- **本地优先**：食材、私人菜谱、历史、设置、索引和模型都保存在应用私有目录。
+
+## 菜谱库与模型
+
+### 官方菜谱库
+
+官方库以 DatasetPack 形式发布，核心内容是：
+
+```text
+dataset-pack.json
+files/
+  vectors.f32       # 已预先生成的 float32 向量
+  metadata.jsonl    # 菜谱文本和元数据
+```
+
+应用读取官方索引后，可以安装不同规模的数据集。推荐只使用当前启用的库，不会因为某个数据集已经下载就自动把它加入检索。
+
+默认数据源：
+
+- Dataset index：`https://huggingface.co/datasets/Yatorou/ChiShenMe/resolve/main/dataset-index.json`
+- DatasetPack 规范：[docs/dataset-pack-v1.md](docs/dataset-pack-v1.md)
+
+### BGE-M3 查询模型
+
+官方 DatasetPack 已经向量化，但手机仍需要同一个 embedding 模型把用户的查询转换成向量。应用使用 `BAAI/bge-m3` 的 ONNX 模型完成这一步。
+
+默认模型包：
+
+`https://huggingface.co/datasets/Yatorou/ChiShenMe/resolve/main/models/bge-m3-query-onnx/model-pack.json`
+
+完整模型包约为 **2.29 GB**。建议在稳定 Wi-Fi 下下载，并至少预留 3 GB 可用空间。模型下载支持 HTTP Range 分块和跨重启断点续传。
+
+## 下载与安装安全
+
+菜谱包和模型包不会直接写入正式安装目录。当前安装流程会：
+
+1. 校验 manifest 格式、文件角色、数量和声明大小。
+2. 只允许无内嵌凭据的 HTTPS 地址。
+3. 拒绝绝对路径、路径穿越、反斜杠和目录越界写入。
+4. 将文件下载到隔离的 `.download` 暂存目录。
+5. 使用流式 SHA-256 校验每个文件，避免把大文件整体读入内存。
+6. 所有文件通过校验后才写入最终 manifest、切换正式目录并登记安装。
+7. 安装提交失败时恢复原版本；损坏文件会被删除，网络中断产生的暂存文件只用于断点续传。
+
+模型包支持 16 MB Range 分块、超时和自动重试。DatasetPack 当前具备 HTTPS、路径、大小、SHA-256 和暂存安装保护，但暂未实现跨重启断点续传。
+
+## Gemini 与隐私
+
+应用没有开发者自建的业务后端。Gemini API Key 由用户自己提供，并保存在系统 SecureStore 中；所有 Gemini 请求统一通过一个网络客户端发送，Key 放在 `x-goog-api-key` 请求头中，不写入 URL。
+
+第一次使用 AI 功能前，应用会显示显著的数据披露。只有用户同意并主动使用相应功能时，才会把完成该次请求所需的数据直接发送给 Google，例如：
+
+- 用户选择的食物照片；
+- 当前食材、饮食偏好和候选菜谱；
+- 需要整理的菜谱文本；
+- 用户主动提交的 YouTube 链接；
+- 用于验证请求的 Gemini API Key。
+
+应用不会自动上传完整的本地菜谱库。用户可以在“设置 → 隐私政策与数据披露”中撤回同意，撤回后新的 Gemini 请求会被阻止。
+
+详细说明：
+
+- [隐私政策与数据披露](PRIVACY.md)
+- [Google Play Data Safety 填写草案](docs/google-play-data-safety.md)
+
+## 用户使用顺序
+
+1. 在“设置”中保存自己的 Gemini API Key。
+2. 打开“菜谱库”，下载并启用一个官方库，或者新建并启用“我的菜谱库”。
+3. 第一次使用向量推荐时，在推荐页下载 BGE-M3 ONNX 模型。
+4. 在“冰箱”中录入食材，也可以不录入食材直接获取随机灵感。
+5. 选择人数、时间、难度、忌口和本次口味，生成推荐。
+6. 做完后记录为“最近做过”，后续推荐会尽量避免短期重复。
+
+不配置 Gemini Key 时，用户仍可管理食材和本地菜谱库；拍照识别、YouTube 菜谱提取和最终 AI 整理功能需要联网及有效的 Gemini Key。
+
+## 技术结构
+
+| 模块 | 实现 |
+| --- | --- |
+| 客户端 | React Native 0.86 + Expo SDK 57 + TypeScript |
+| 导航 | React Navigation |
+| 本地数据 | Expo SQLite、AsyncStorage |
+| 密钥存储 | Expo SecureStore |
+| 本地 embedding | ONNX Runtime React Native + BGE-M3 ONNX |
+| 官方向量检索 | `vectors.f32` 本地 topK 扫描 + `metadata.jsonl` |
+| 个人菜谱检索 | 本机 embedding 缓存，必要时回退文本检索 |
+| 云端 AI | Google Gemini API |
+| 文件完整性 | HTTPS、受限路径、声明大小、流式 SHA-256、暂存目录 |
+
+主要目录：
+
+```text
+src/
+  application/     应用启动、Provider 和导航组合
+  ai/              Gemini 客户端、提示词和返回解析
+  datasets/        DatasetPack 下载、校验和注册
+  db/              SQLite 数据库与 Repository
+  downloads/       URL、路径、Range 和 SHA-256 公共安全逻辑
+  features/        按首页、食材、菜谱、推荐、历史和设置组织的业务模块
+    */screens/     各业务模块页面
+    */hooks/       仅属于该业务的 React hooks
+    */services/    仅属于该业务的计算与服务
+  privacy/         AI 数据同意状态与首次披露
+  rag/             ONNX embedding、向量库、元数据和个人 RAG
+  shared/          跨业务复用的组件和主题
+  storage/         设置与推荐缓存
+docs/               数据格式、RAG 和上架说明
+tests/              下载安全、网络层和发布策略测试
+android/            Android 原生工程
+```
+
+## 本地开发
+
+### 环境要求
+
+- Node.js 22 或兼容版本
+- npm
+- JDK 17
+- Android SDK 36
+- Android 真机或模拟器
+
+项目包含 `onnxruntime-react-native` 原生模块，因此不能只用 Expo Go，必须构建 Development Build。
+
+### 安装依赖
+
+```powershell
+cd D:\androidCode\ChiShenMe\mobile
+npm install
+```
+
+### 连接 Android 设备并运行
+
+```powershell
+npx expo run:android
+```
+
+也可以使用仓库脚本，并按本机环境传入 JDK：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/android-device-dev.ps1 `
+  -AndroidSdk "$env:LOCALAPPDATA\Android\Sdk" `
+  -JavaHome "C:\path\to\jdk-17"
+```
+
+原生 Development Build 已安装后，日常启动 Metro：
+
+```powershell
+npm run start:dev-client
+```
+
+### 检查与测试
+
+```powershell
+npm test
+npm run test:types
+npm run check
+```
+
+测试覆盖 manifest 校验、HTTPS 与路径约束、SHA-256、Range 断点续传、Gemini Key 传输、安装提交顺序以及 Release 权限策略。
+
+### Release 签名
+
+复制示例文件并填写自己的上传密钥信息：
+
+```powershell
+Copy-Item android/key.properties.example android/key.properties
+```
+
+`android/key.properties` 和 keystore 不应提交到 Git。配置完成后可运行：
+
+```powershell
+cd android
+.\gradlew.bat bundleRelease
+```
+
+## 当前边界
+
+- ONNX 模型包约 2.29 GB，下载、SHA-256 校验和首次加载都需要时间；中低端设备可能不适合本地运行 BGE-M3。
+- 官方向量检索当前为 JS 分块扫描，不是 HNSW/IVF 等 ANN 索引；超大数据集的延迟仍需优化。
+- 文本回退检索在已经找到足够候选时，会在扫描 10,000 条官方 metadata 记录后提前返回。
+- DatasetPack 暂未实现跨重启断点续传，模型包已经支持。
+- Gemini 功能依赖网络、Google 服务可用性、模型权限及用户自己的 API 配额。
+
+后续适合继续优化的方向包括：原生 ANN 向量索引、dataset 断点续传、cross-encoder rerank、后台下载，以及更完善的端到端真机测试。
+
+## 相关文档
+
+- [源码目录与依赖规则](src/README.md)
+- [DatasetPack v1](docs/dataset-pack-v1.md)
+- [ONNX RAG](docs/onnx-rag.md)
+- [Android 本地 Embedding](docs/android-local-embedding.md)
+- [RAG 数据预处理](docs/rag-preprocessing.md)
+- [隐私政策](PRIVACY.md)
+- [Google Play Data Safety](docs/google-play-data-safety.md)
+- [商店素材说明](store-listing/default/README.md)
 
 ---
 
-## English
+## English overview
 
-FridgeChef is an intelligent recipe recommendation app for everyday cooking. It looks at the ingredients you already have, the recipe libraries you enabled, your recent cooking history, and your current taste preferences. It then uses local RAG retrieval to find candidate recipes and asks Gemini to turn them into practical cooking suggestions.
+FridgeChef is an Android-first, local-first cooking assistant. It combines the ingredients on hand, enabled recipe libraries, cooking history, and current preferences to retrieve candidate recipes on the device. An optional BGE-M3 ONNX model provides local vector search, while text search remains available as a fallback. After a prominent user consent step, Gemini can recognize ingredients from photos, extract recipe drafts from YouTube links, and refine retrieved candidates into practical cooking plans.
 
-The goal is not to show a static recipe list. The goal is to answer a more useful question: what can I cook today with what I already have?
+Official DatasetPacks are pre-vectorized. Personal recipes can be embedded and cached locally when the ONNX model is available. Ingredients, recipes, history, settings, indexes, and models stay in app-private storage. Only the data required for an AI request is sent directly to Google when the user actively invokes that feature.
 
-### Core Features
-
-- Ingredient management: add ingredients manually or recognize ingredients from fridge photos with AI.
-- Smart recommendations: generate recipe suggestions from available ingredients, taste tags, serving size, time limit, difficulty, and dietary restrictions.
-- RAG recipe retrieval: retrieve candidate recipes from enabled official and personal recipe libraries, then let Gemini filter and refine the results.
-- Personal recipe libraries: create your own recipe libraries, add recipes manually, or generate recipes from YouTube links with Gemini.
-- Recipe library management: enable, disable, delete, rename, and filter libraries by recipe name, ingredients, source, and difficulty.
-- Cooking history: record recently cooked recipes and avoid repeating them during recommendation.
-- Bilingual UI: supports Chinese and English, with automatic initial language selection based on the system language.
-- Gemini integration: all AI features use Gemini, and users configure their own Gemini API key locally.
-
-### Recommendation Flow
-
-FridgeChef uses a three-step recommendation flow:
-
-1. Collect local context: current ingredients, user settings, recent cooking history, enabled official libraries, and enabled personal libraries.
-2. Retrieve candidate recipes with RAG: search enabled libraries for recipes matching ingredients and taste preferences. If there are no ingredients, FridgeChef can randomly sample candidates from enabled libraries.
-3. Refine with Gemini: Gemini filters out non-recipe content, avoids recently cooked dishes, and returns clearer steps that are easier to follow.
-
-If the Gemini API key is not configured, the recommendation page asks the user to configure it first. If a Gemini request fails, the app retries before showing a final failure message.
-
-### Recipe Libraries
-
-FridgeChef supports two types of recipe libraries:
-
-- Official recipe libraries: provided by the app and available in Lite, Medium, and Full dataset sizes.
-- My recipe libraries: created and maintained by the user. Recipes can be added manually or generated from YouTube links.
-
-Recommendations only use currently enabled libraries. Downloaded or created libraries are not automatically included unless the user enables them. This makes it possible to switch between different cooking contexts, such as home cooking, weight-loss meals, Cantonese dishes, or kids' meals.
-
-### AI Capabilities
-
-FridgeChef currently uses Gemini for:
-
-- Recognizing ingredients from images.
-- Parsing YouTube links and generating recipes.
-- Filtering, ranking, and rewriting RAG candidate recipes.
-- Producing clearer, more actionable cooking steps.
-
-The Gemini API key is configured by the user and stored only on the device with Expo SecureStore.
-
-### Privacy and Data
-
-FridgeChef does not run its own backend server. User data is stored locally by default, including:
-
-- Ingredient list
-- Personal recipe libraries
-- Cooking history
-- User settings
-- Gemini API key
-
-The API key is not stored in SQLite, is not stored in regular AsyncStorage, and is not uploaded to recipe libraries. Images, links, or text are only sent to Gemini when the user actively uses an AI feature.
-
-### Use Cases
-
-- You do not know what to cook today.
-- You want dinner ideas based on leftover fridge ingredients.
-- You want to avoid repeating the same dishes too often.
-- You want to build your own recipe database.
-- You want to turn YouTube cooking videos into searchable recipes.
-- You want AI to adapt recipe steps to your own taste and constraints.
-
-### Technical Overview
-
-FridgeChef is an Android-first React Native + Expo + TypeScript app.
-
-Main technical components:
-
-- Local SQLite storage
-- Expo SecureStore for API key storage
-- Local official DatasetPack management
-- ONNX embedding query model
-- Local vector search and text search
-- Gemini API for multimodal recognition and recommendation refinement
-
-This project requires an Android Development Build. It is not intended to run only in Expo Go.
-
----
-
-## 中文
-
-FridgeChef 是一款面向日常做饭场景的智能菜谱推荐 App。它可以根据你冰箱里已有的食材、启用的菜谱库、最近做过的菜和本次口味要求，使用本地 RAG 检索菜谱，再交给 Gemini 整理成更适合直接照着做的推荐方案。
-
-这个 App 的目标不是简单展示菜谱列表，而是帮助用户回答一个更实际的问题：今天手头这些食材，适合做什么？
-
-### 核心功能
-
-- 食材管理：支持手动添加食材，也支持拍照后用 AI 识别食材。
-- 智能推荐：根据当前食材、本次口味标签、人数、时间、难度和忌口生成菜谱推荐。
-- RAG 菜谱检索：从启用的官方菜谱库和个人菜谱库中检索候选菜谱，再交给 Gemini 过滤和整理。
-- 个人菜谱库：用户可以新建自己的菜谱库，手动添加菜谱，或通过 YouTube 链接让 Gemini 解析生成菜谱。
-- 菜谱库管理：支持启用、停用、删除、重命名菜谱库，并支持按菜名、食材、来源和难度筛选。
-- 做饭记录：记录最近做过的菜，推荐时自动避开近期重复菜谱。
-- 多语言界面：支持中文和英文，并可根据系统语言自动选择初始语言。
-- Gemini 集成：所有 AI 功能统一使用 Gemini，用户在本机配置自己的 Gemini API Key。
-
-### 推荐流程
-
-FridgeChef 的推荐流程分为三步：
-
-1. 本地收集上下文：读取当前食材、用户设置、最近做过的菜、启用的官方菜谱库和个人菜谱库。
-2. RAG 检索候选菜谱：优先从启用的菜谱库中检索匹配食材和口味要求的菜谱；如果没有食材，也会从启用库中随机抽取候选菜谱。
-3. Gemini 整理结果：Gemini 会过滤掉非菜谱内容、避开近期做过的菜，并输出更自然、更适合用户直接操作的做菜步骤。
-
-如果 Gemini API Key 没有配置，推荐页会提示用户先配置 API Key。Gemini 调用失败时会自动重试，连续失败后才提示调用失败。
-
-### 菜谱库
-
-FridgeChef 支持两类菜谱库：
-
-- 官方菜谱库：由 App 提供，可下载 Lite / Medium / Full 三档数据集。
-- 我的菜谱库：由用户自己创建和维护，可手动录入菜谱，也可从 YouTube 链接生成菜谱。
-
-推荐只会使用当前启用的菜谱库，不会强制使用所有已下载或已创建的库。这样用户可以按场景切换不同的菜谱来源，例如家常菜库、减脂餐库、广东菜库或儿童餐库。
-
-### AI 能力
-
-FridgeChef 当前使用 Gemini 完成以下任务：
-
-- 识别图片中的食材。
-- 从 YouTube 链接解析并生成菜谱。
-- 对 RAG 返回的候选菜谱进行过滤、排序和改写。
-- 生成更清晰、可执行的做菜步骤。
-
-Gemini API Key 由用户自行配置，并只保存在本机 SecureStore 中。
-
-### 隐私与数据
-
-FridgeChef 不自建服务器。用户数据默认保存在本机，包括：
-
-- 食材列表
-- 个人菜谱库
-- 做饭历史
-- 用户设置
-- Gemini API Key
-
-API Key 不写入 SQLite、不写入普通 AsyncStorage，也不会上传到菜谱库。只有在用户主动使用 AI 功能时，相关图片、链接或文本才会发送给 Gemini API 处理。
-
-### 适用场景
-
-- 不知道今天吃什么。
-- 想根据冰箱剩余食材快速决定晚饭。
-- 想减少重复做同一道菜。
-- 想建立自己的菜谱数据库。
-- 想把 YouTube 做饭视频整理成可搜索、可推荐的菜谱。
-- 想让 AI 根据个人口味生成更适合自己的做菜步骤。
-
-### 技术概览
-
-FridgeChef 是一个 Android-first 的 React Native + Expo + TypeScript App。
-
-主要技术方向：
-
-- 本地 SQLite 数据存储
-- Expo SecureStore 保存 API Key
-- 本地官方 DatasetPack 管理
-- ONNX embedding 查询模型
-- 本地向量检索与文本检索
-- Gemini API 进行多模态识别和推荐整理
-
-当前项目需要 Android Development Build，不适合只用 Expo Go 运行。
+See the Chinese sections above for setup, architecture, security, privacy, testing, and current limitations.

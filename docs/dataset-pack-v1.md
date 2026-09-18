@@ -129,7 +129,7 @@ App 下载单个 DatasetPack 时会：
 5. 在 AsyncStorage 里登记已安装数据集
 6. 支持启用和删除本机数据集
 
-当前 App 会校验下载后的文件大小。`sha256` 已写入 manifest，但 Android 端 hash 校验还未实现。
+当前 App 会在隔离的下载目录中校验文件大小和 `sha256`，全部通过后才原子切换到正式目录并登记为已安装。
 
 ## 当前边界
 
@@ -148,6 +148,6 @@ App 下载单个 DatasetPack 时会：
 
 - Cross-encoder rerank
 - 用户自定义 recipe dataset 的本机 embedding
-- manifest `sha256` 校验
+- 分块下载与跨重启断点续传（模型包已支持，dataset 包待统一）
 
-下一步应补齐 rerank、用户自定义 dataset 的本机 embedding，以及下载文件的 `sha256` 校验。
+下一步应补齐 rerank、用户自定义 dataset 的本机 embedding，以及 dataset 包的断点续传。

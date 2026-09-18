@@ -1,0 +1,696 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { BackHandler } from 'react-native';
+import App from '../src/application/App';
+import {
+  RecommendationRefinerError,
+  refineRagRecommendationsWithProvider,
+} from '../src/ai/recommendationRefiner';
+import { getRecommendationInputSnapshot } from '../src/features/recommendations/recommendation-input';
+import { loadRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness';
+import { getRagRecommendations } from '../src/rag/ragService';
+import { NAVIGATION_STATE_STORAGE_KEY } from '../src/storage/navigation-state-storage';
+import { loadRecommendationCache } from '../src/storage/recommendationCacheStorage';
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+
+jest.mock('lucide-react-native', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Icon = (props: object) => React.createElement(View, props);
+  return {
+    AlertTriangle: Icon,
+    CheckCircle2: Icon,
+    ChevronDown: Icon,
+    ChevronRight: Icon,
+    Circle: Icon,
+    House: Icon,
+    Refrigerator: Icon,
+    Settings2: Icon,
+    Sparkles: Icon,
+    UserRound: Icon,
+  };
+});
+
+jest.mock('../src/db/database', () => ({ initializeDatabase: jest.fn(async () => undefined) }));
+
+jest.mock('../src/features/ingredients', () => {
+  const { Pressable, Text, View } = require('react-native');
+  return {
+    FridgeScreen: ({ navigation }: { navigation: { navigate: (name: string) => void; setOptions: (options: object) => void } }) => {
+      const React = require('react');
+      React.useEffect(() => {
+        navigation.setOptions({
+          headerRight: () => (
+            <Pressable accessibilityLabel="Fridge header action" accessibilityRole="button" onPress={() => undefined} />
+          ),
+        });
+      }, [navigation]);
+      return (
+        <View>
+          <Text>Fridge destination</Text>
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate('AddIngredient')}>
+            <Text>Open add ingredient</Text>
+          </Pressable>
+        </View>
+      );
+    },
+    AddIngredientScreen: () => <Text>Add ingredient destination</Text>,
+    ConfirmRecognizedFoodScreen: () => <Text>Confirm food destination</Text>,
+  };
+});
+
+jest.mock('../src/features/my', () => {
+  const { Text } = require('react-native');
+  return { MyScreen: () => <Text>My destination</Text> };
+});
+jest.mock('../src/features/datasets', () => {
+  const { Text } = require('react-native');
+  return { DatasetLibraryScreen: () => <Text>Dataset library</Text> };
+});
+jest.mock('../src/features/history', () => {
+  const { Text } = require('react-native');
+  return { HistoryScreen: () => <Text>History</Text> };
+});
+jest.mock('../src/features/recipes', () => {
+  const { Text } = require('react-native');
+  return {
+    AddUserRecipeScreen: () => <Text>Add recipe</Text>,
+    RecipeDetailScreen: () => <Text>Recipe detail</Text>,
+    UserRecipeLibrariesScreen: () => <Text>Recipe libraries</Text>,
+    UserRecipeLibraryDetailScreen: () => <Text>Recipe library detail</Text>,
+  };
+});
+jest.mock('../src/features/settings', () => {
+  const { Text } = require('react-native');
+  return {
+    ApiKeySettingsScreen: () => <Text>API key settings</Text>,
+    DataManagementScreen: () => <Text>Data management</Text>,
+    PrivacyPolicyScreen: () => <Text>Privacy policy</Text>,
+    SettingsScreen: () => <Text>Settings</Text>,
+  };
+});
+
+jest.mock('../src/ai/recommendationRefiner', () => ({
+  ...jest.requireActual('../src/ai/recommendationRefiner'),
+  refineRagRecommendationsWithProvider: jest.fn(async () => []),
+}));
+jest.mock('../src/db/cookedHistoryRepository', () => ({
+  markRecipeCooked: jest.fn(async () => undefined),
+  normalizeRecipeId: (value: string) => value,
+}));
+jest.mock('../src/privacy/request-ai-data-consent', () => ({
+  requestAiDataConsent: jest.fn(async () => true),
+}));
+jest.mock('../src/rag/model/modelPack', () => ({
+  downloadEmbeddingModelPack: jest.fn(async () => undefined),
+}));
+jest.mock('../src/rag/ragService', () => ({
+  getRagRecommendations: jest.fn(async () => ({
+    mode: 'rag',
+    recommendations: [
+      {
+        id: 'candidate-1',
+        title: 'Candidate recipe',
+        score: 1,
+        text: 'Candidate recipe',
+        metadata: {},
+      },
+    ],
+  })),
+}));
+jest.mock('../src/storage/recommendationCacheStorage', () => ({
+  loadRecommendationCache: jest.fn(async () => null),
+  saveRecommendationCache: jest.fn(async () => undefined),
+}));
+jest.mock('../src/storage/recommendationTagStorage', () => ({
+  loadRecommendationRequestTags: jest.fn(async (_language: string, defaults: string[]) => defaults),
+  saveRecommendationRequestTags: jest.fn(async () => undefined),
+}));
+jest.mock('../src/storage/settingsStorage', () => ({
+  getApiKey: jest.fn(async () => 'test-key'),
+  getSettings: jest.fn(async () => ({ recentHistoryDays: 7 })),
+}));
+jest.mock('../src/features/recommendations/recommendation-input', () => ({
+  getRecommendationInputSnapshot: jest.fn(async () => ({
+    ingredients: [{ id: 'ingredient-1', name: 'tomato' }],
+    inputSignature: 'tomato',
+    recentCookedRecipeIds: new Set(),
+    settings: {},
+  })),
+  normalizeRecommendationSignatureText: (value: string) => value.trim(),
+}));
+jest.mock('../src/features/recommendations/recommendation-readiness', () => ({
+  loadRecommendationReadiness: jest.fn(async () => ({
+    consentReady: true,
+    credentialReady: true,
+    modelReady: true,
+    ready: true,
+    sourceReady: true,
+  })),
+}));
+
+const CACHED_TOMATO_SUPPER = {
+  cachedAt: new Date().toISOString(),
+  ingredientCount: 1,
+  inputSignature: 'tomato',
+  language: 'en' as const,
+  ragResult: {
+    mode: 'rag' as const,
+    datasetName: 'Test recipes',
+    modelName: 'Test model',
+    query: 'tomato',
+    recommendations: [
+      { id: 'candidate-1', title: 'Candidate recipe', score: 1, text: 'Candidate recipe', metadata: {} },
+    ],
+  },
+  refinedRecommendations: [
+    {
+      id: 'candidate-1',
+      title: 'Tomato supper',
+      scoreReason: 'Uses the ingredient you have.',
+      matchedIngredients: ['tomato'],
+      missingIngredients: [],
+      difficulty: '简单' as const,
+      estimatedTimeMinutes: 15,
+      servingNote: '2 servings',
+      cleanSteps: ['Cook the tomato.'],
+      notes: '',
+    },
+  ],
+  sentCandidateKeys: ['candidate-1'],
+};
+
+function collectRenderedText(node: unknown): string[] {
+  if (typeof node === 'string') return [node];
+  if (Array.isArray(node)) return node.flatMap(collectRenderedText);
+  if (node && typeof node === 'object' && 'children' in node) {
+    return collectRenderedText((node as { children: unknown }).children);
+  }
+  return [];
+}
+
+describe('application navigation behavior', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    jest.mocked(loadRecommendationCache).mockResolvedValue(null);
+    jest.mocked(getRecommendationInputSnapshot).mockResolvedValue({
+      ingredients: [{ id: 'ingredient-1', name: 'tomato' }] as never,
+      inputSignature: 'tomato',
+      recentCookedRecipeIds: new Set(),
+      settings: {} as never,
+    });
+    jest.mocked(loadRecommendationReadiness).mockResolvedValue({
+      consentReady: true,
+      credentialReady: true,
+      modelReady: true,
+      ready: true,
+      sourceReady: true,
+    });
+    await AsyncStorage.clear();
+    await AsyncStorage.setItem('chi_shen_me.language', 'en');
+  });
+
+  it('offers exactly four localized destinations and retains each tab history', async () => {
+    const screen = await render(<App />);
+
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    const tabs = screen.getAllByRole('button').filter((button) => button.props.accessibilityState?.selected !== undefined);
+    expect(tabs.map((tab) => tab.props.accessibilityLabel)).toEqual([
+      'Home',
+      'Fridge',
+      'Recipe Recommendations',
+      'My',
+    ]);
+    expect(screen.getByText('Recommendations')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Fridge' }));
+    await screen.findByText('Fridge destination');
+    await fireEvent.press(screen.getByRole('button', { name: 'Open add ingredient' }));
+    await screen.findByText('Add ingredient destination');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Home' }));
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    await fireEvent.press(screen.getByRole('button', { name: 'Fridge' }));
+    await screen.findByText('Add ingredient destination');
+  });
+
+  it('directs an empty fridge to Fridge before asking for Recommendation Ready setup', async () => {
+    jest.mocked(getRecommendationInputSnapshot).mockResolvedValueOnce({
+      ingredients: [],
+      inputSignature: 'empty',
+      recentCookedRecipeIds: new Set(),
+      settings: {} as never,
+    });
+    jest.mocked(loadRecommendationReadiness).mockResolvedValueOnce({
+      consentReady: false,
+      credentialReady: false,
+      modelReady: false,
+      ready: false,
+      sourceReady: false,
+    });
+
+    const screen = await render(<App />);
+    expect(await screen.findByRole('button', { name: 'Your fridge is empty · Add ingredients' })).toBeTruthy();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('Your fridge is empty');
+    expect(screen.queryByText('A few steps remain')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Add to fridge' }));
+    await screen.findByText('Fridge destination');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('presents the Home dialog title as a heading without an unnamed backdrop focus stop', async () => {
+    jest.mocked(loadRecommendationReadiness).mockResolvedValueOnce({
+      consentReady: false,
+      credentialReady: false,
+      modelReady: true,
+      ready: false,
+      sourceReady: true,
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    const title = await screen.findByText('A few steps remain');
+    expect(title.props.accessibilityRole).toBe('header');
+
+    const unnamedFocusStops = [];
+    for (let node = title.parent; node; node = node.parent) {
+      if (node.props.accessible === true && !node.props.accessibilityLabel) unnamedFocusStops.push(node);
+    }
+    expect(unnamedFocusStops).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('shows the Confirmed Ingredient count on the secondary action and opens Fridge', async () => {
+    const screen = await render(<App />);
+
+    const fridgeAction = await screen.findByRole('button', { name: 'View fridge · 1 ingredient' });
+    await fireEvent.press(fridgeAction);
+
+    await screen.findByText('Fridge destination');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('explains missing credential setup and opens Settings without generating', async () => {
+    jest.mocked(loadRecommendationReadiness).mockResolvedValueOnce({
+      consentReady: false,
+      credentialReady: false,
+      modelReady: true,
+      ready: false,
+      sourceReady: true,
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('A few steps remain');
+    expect(screen.getByText(/Save and test a Gemini API key/)).toBeTruthy();
+    expect(screen.getByText(/Allow AI data sharing/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
+    await screen.findByText('Settings');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('explains missing local readiness and opens the Dataset Library without generating', async () => {
+    jest.mocked(loadRecommendationReadiness).mockResolvedValueOnce({
+      consentReady: true,
+      credentialReady: true,
+      modelReady: false,
+      ready: false,
+      sourceReady: false,
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('A few steps remain');
+    expect(screen.getByText(/Enable the BGE-M3 model/)).toBeTruthy();
+    expect(screen.getByText(/Enable at least one recipe source/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
+    await screen.findByText('Dataset library');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('preserves the ingredient count and offers setup recovery when readiness loading fails', async () => {
+    jest.mocked(loadRecommendationReadiness).mockRejectedValueOnce(new Error('settings unavailable'));
+
+    const screen = await render(<App />);
+    expect(await screen.findByRole('button', { name: 'View fridge · 1 ingredient' })).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('Recommendation setup is unavailable');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check setup' })).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Check setup' }));
+    await screen.findByText('Settings');
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('offers retry and Fridge recovery when inventory loading fails', async () => {
+    jest.mocked(getRecommendationInputSnapshot).mockRejectedValueOnce(new Error('database unavailable'));
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await screen.findByText('The fridge is unavailable');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check fridge' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Fridge unavailable · Check data' })).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(getRecommendationInputSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('The fridge is unavailable')).toBeNull());
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('keeps generation disabled while Home is loading', async () => {
+    let resolveSnapshot!: (value: Awaited<ReturnType<typeof getRecommendationInputSnapshot>>) => void;
+    jest.mocked(getRecommendationInputSnapshot).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveSnapshot = resolve; }),
+    );
+
+    const screen = await render(<App />);
+    const generate = await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    expect(generate.props.accessibilityState).toEqual({ busy: true, disabled: true });
+    expect(screen.getByRole('button', { name: 'Checking fridge…' })).toBeTruthy();
+
+    await fireEvent.press(generate);
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    await act(() => {
+      resolveSnapshot({
+        ingredients: [{ id: 'ingredient-1', name: 'tomato' }] as never,
+        inputSignature: 'tomato',
+        recentCookedRecipeIds: new Set(),
+        settings: {} as never,
+      });
+    });
+    await waitFor(() => expect(generate.props.accessibilityState).toEqual({ busy: false, disabled: false }));
+  });
+
+  it('generates once only after the explicit Home action and does not replay on focus', async () => {
+    const screen = await render(<App />);
+
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+    expect(getRagRecommendations).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Recipe Recommendations' }).props.accessibilityState).toEqual({ selected: true }));
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Home' }));
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
+    await screen.findByText('Recommendation Ready');
+    await act(async () => undefined);
+
+    expect(getRagRecommendations).toHaveBeenCalledTimes(1);
+    expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('passively restores Recommendations without replaying a generation request', async () => {
+    await AsyncStorage.setItem(
+      NAVIGATION_STATE_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        state: {
+          index: 0,
+          routes: [
+            {
+              name: 'MainTabs',
+              state: {
+                index: 2,
+                routes: [
+                  { name: 'HomeStack' },
+                  { name: 'FridgeStack' },
+                  {
+                    name: 'RecommendationsStack',
+                    state: {
+                      index: 0,
+                      routes: [
+                        {
+                          name: 'Recommendations',
+                          params: { generationRequestId: 'must-not-replay' },
+                        },
+                      ],
+                    },
+                  },
+                  { name: 'MyStack' },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const screen = await render(<App />);
+
+    await screen.findByText('Recommendation Ready');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Recipe Recommendations' }).props.accessibilityState).toEqual({ selected: true }));
+    expect(getRagRecommendations).not.toHaveBeenCalled();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+  });
+
+  it('passively presents cached Recommendations and identifies them as cached', async () => {
+    jest.mocked(loadRecommendationCache).mockResolvedValue({
+      cachedAt: new Date().toISOString(),
+      ingredientCount: 1,
+      inputSignature: 'tomato',
+      language: 'en',
+      ragResult: {
+        mode: 'rag',
+        datasetName: 'Test recipes',
+        modelName: 'Test model',
+        query: 'tomato',
+        recommendations: [
+          {
+            id: 'candidate-1',
+            title: 'Candidate recipe',
+            score: 1,
+            text: 'Candidate recipe',
+            metadata: {},
+          },
+        ],
+      },
+      refinedRecommendations: [
+        {
+          id: 'candidate-1',
+          title: 'Tomato supper',
+          scoreReason: 'Uses the ingredient you have.',
+          matchedIngredients: ['tomato'],
+          missingIngredients: [],
+          difficulty: '简单',
+          estimatedTimeMinutes: 15,
+          servingNote: '2 servings',
+          cleanSteps: ['Cook the tomato.'],
+          notes: '',
+        },
+      ],
+      sentCandidateKeys: ['candidate-1'],
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+
+    expect(await screen.findByText('Tomato supper')).toBeTruthy();
+    expect(screen.getByText(/Showing cached recommendations/)).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).not.toHaveBeenCalled();
+
+    jest.mocked(refineRagRecommendationsWithProvider).mockRejectedValueOnce(
+      new RecommendationRefinerError('quota', 'quota exceeded'),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    expect(await screen.findByText(/quota is unavailable/)).toBeTruthy();
+    expect(screen.getByText(/Showing cached recommendations/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Home' }));
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    jest.mocked(getRecommendationInputSnapshot).mockResolvedValue({
+      ingredients: [{ id: 'ingredient-1', name: 'tomato' }] as never,
+      inputSignature: JSON.stringify({ settings: { dietaryPreferences: 'tomato allergy' } }),
+      recentCookedRecipeIds: new Set(),
+      settings: {} as never,
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
+    await waitFor(() => expect(screen.queryByText('Tomato supper')).toBeNull());
+  });
+
+  it('waits for an explicit retry after a Gemini failure', async () => {
+    jest.mocked(refineRagRecommendationsWithProvider)
+      .mockRejectedValueOnce(new RecommendationRefinerError('quota', 'quota exceeded'))
+      .mockResolvedValueOnce([]);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/quota is unavailable/)).toBeTruthy();
+
+    await act(async () => undefined);
+    expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(2));
+  });
+
+  it('announces generation progress and a Gemini failure to TalkBack', async () => {
+    let rejectRefinement!: (error: Error) => void;
+    jest.mocked(refineRagRecommendationsWithProvider).mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { rejectRefinement = reject; }),
+    );
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+
+    const progress = screen.getByText('Generating recommendations').parent;
+    expect(progress?.props.accessibilityLiveRegion).toBe('polite');
+    expect(progress?.props.accessibilityState).toEqual({ busy: true });
+
+    await act(() => {
+      rejectRefinement(new RecommendationRefinerError('quota', 'quota exceeded'));
+    });
+    const failure = await screen.findByText(/quota is unavailable/);
+    expect(failure.props.accessibilityLiveRegion).toBe('polite');
+  });
+
+  it('requires an explicit retry after an invalid Gemini response', async () => {
+    jest.mocked(refineRagRecommendationsWithProvider)
+      .mockRejectedValueOnce(new RecommendationRefinerError('invalid_response', 'Gemini 返回内容为空。'))
+      .mockResolvedValueOnce([]);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Get recipe recommendations' }));
+
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/unexpected format/)).toBeTruthy();
+    expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate new recommendations with Gemini' }));
+    await waitFor(() => expect(refineRagRecommendationsWithProvider).toHaveBeenCalledTimes(2));
+  });
+
+  it('presents populated English Recommendations without Chinese copy or untranslated keys', async () => {
+    jest.mocked(loadRecommendationCache).mockResolvedValue(CACHED_TOMATO_SUPPER);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+    await screen.findByText('Tomato supper');
+    await fireEvent.press(screen.getByRole('button', { name: /Cuisine style/ }));
+
+    const text = collectRenderedText(screen.toJSON()).join('\n');
+    expect(text).not.toMatch(/[　-〿一-鿿＀-￯]/);
+    expect(text).not.toMatch(/\b(?:app|common|nav|home|fridge|my|settings|recommendations|difficulty)\.[a-z][A-Za-z]+/);
+    expect(screen.getByText('1 ingredient')).toBeTruthy();
+  });
+
+  it('announces request sections and recipe actions with their state and recipe', async () => {
+    jest.mocked(loadRecommendationCache).mockResolvedValue(CACHED_TOMATO_SUPPER);
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+    await screen.findByText('Tomato supper');
+
+    const cuisine = screen.getByRole('button', { name: 'Cuisine style' });
+    expect(cuisine.props.accessibilityState).toEqual({ expanded: false });
+    await fireEvent.press(cuisine);
+    await fireEvent.press(screen.getByRole('button', { name: 'Not spicy' }));
+    expect(screen.getByRole('button', { name: 'Cuisine style, 1 selected' }).props.accessibilityState).toEqual({ expanded: true });
+
+    expect(screen.getByRole('button', { name: 'Cook this today: Tomato supper' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask Gemini to replace this recommendation: Tomato supper' })).toBeTruthy();
+  });
+
+  it('reads completed readiness as status and incomplete readiness as an action', async () => {
+    jest.mocked(loadRecommendationReadiness).mockResolvedValue({
+      consentReady: true,
+      credentialReady: false,
+      modelReady: true,
+      ready: false,
+      sourceReady: true,
+    });
+
+    const screen = await render(<App />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Recipe Recommendations' }));
+
+    const action = await screen.findByRole('button', { name: 'Save and test the Gemini API key. Set up' });
+    await waitFor(() => expect(action.props.accessibilityState).toEqual({ busy: false, disabled: false }));
+    expect(screen.queryByRole('button', { name: /Agree to the AI data disclosure/ })).toBeNull();
+    expect(screen.getByLabelText('Agree to the AI data disclosure. Ready')).toBeTruthy();
+
+    await fireEvent.press(action);
+    await screen.findByText('API key settings');
+  });
+
+  it('updates every destination label when Chinese is selected', async () => {
+    await AsyncStorage.setItem('chi_shen_me.language', 'zh');
+
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: '首页' });
+
+    const tabs = screen.getAllByRole('button').filter((button) => button.props.accessibilityState?.selected !== undefined);
+    expect(tabs.map((tab) => tab.props.accessibilityLabel)).toEqual([
+      '首页',
+      '冰箱',
+      '菜谱推荐',
+      '我的',
+    ]);
+  });
+
+  it('keeps every visible tab label on one line so no word breaks at large font sizes', async () => {
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+
+    for (const label of ['Home', 'Fridge', 'Recommendations', 'My']) {
+      const text = screen.getByText(label);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.adjustsFontSizeToFit).toBe(true);
+    }
+  });
+
+  it('shows full top-level destination titles as wrapping headings with their header actions', async () => {
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Recipe Recommendations' }));
+    const recommendationsTitle = await screen.findByRole('header', { name: 'Recipe Recommendations' });
+    expect(recommendationsTitle.props.numberOfLines).toBeUndefined();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Fridge' }));
+    const fridgeTitle = await screen.findByRole('header', { name: 'Fridge' });
+    expect(fridgeTitle.props.numberOfLines).toBeUndefined();
+    expect(within(fridgeTitle.parent!).getByRole('button', { name: 'Fridge header action' })).toBeTruthy();
+  });
+
+  it('returns from another top-level destination to Home on Android back', async () => {
+    let hardwareBackPress: Parameters<typeof BackHandler.addEventListener>[1] | undefined;
+    const backHandlerSpy = jest.spyOn(BackHandler, 'addEventListener').mockImplementation(
+      (_event, handler) => {
+        hardwareBackPress = handler;
+        return { remove: jest.fn() };
+      },
+    );
+
+    const screen = await render(<App />);
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+    await fireEvent.press(screen.getByRole('button', { name: 'My' }));
+    await screen.findByText('My destination');
+
+    await act(() => {
+      expect(hardwareBackPress?.({} as never)).toBe(true);
+    });
+    await screen.findByRole('button', { name: 'Get recipe recommendations' });
+
+    backHandlerSpy.mockRestore();
+  });
+});

@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chishenme.fridgechef",
@@ -21,9 +21,15 @@
       "package": "com.chishenme.fridgechef",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.DETECT_SCREEN_CAPTURE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#FFF8E8",
@@ -53,7 +59,13 @@
         }
       ],
       "expo-asset",
-      "onnxruntime-react-native"
-    ]
+      "onnxruntime-react-native",
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ab8c5412-c975-470a-a3e0-fd4cf442a9ef"
+      }
+    }
   }
 }

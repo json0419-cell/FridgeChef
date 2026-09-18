@@ -1,11 +1,20 @@
 import { extractGeminiText, extractJsonObject } from './json';
-import { buildGeminiGenerateContentEndpoint } from './geminiConfig';
+import { fetchGeminiGenerateContent, readGeminiJsonResponse } from './geminiClient';
 import { buildRecommendationRefinerPrompt } from './recommendationRefinerPrompt';
 import type { AppSettings, Ingredient, RagRecommendation, RefinedRagRecommendation } from '../types';
 
 type OutputLanguage = 'zh' | 'en';
+export type RecommendationRefinerFailureCode = 'authentication' | 'invalid_response' | 'provider' | 'quota';
 
-const PROVIDER_REQUEST_TIMEOUT_MS = 25000;
+export class RecommendationRefinerError extends Error {
+  constructor(
+    readonly code: RecommendationRefinerFailureCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RecommendationRefinerError';
+  }
+}
 
 export interface RecommendationRefinerInput {
   apiKey: string;
@@ -42,12 +51,9 @@ async function refineWithGemini(
   prompt: string,
   sourceRecommendations: RagRecommendation[],
 ): Promise<RefinedRagRecommendation[]> {
-  const response = await fetchWithTimeout(buildGeminiGenerateContentEndpoint(apiKey), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await fetchGeminiGenerateContent(
+    apiKey,
+    {
       contents: [
         {
           parts: [{ text: prompt }],
@@ -58,30 +64,21 @@ async function refineWithGemini(
         temperature: 0.2,
         maxOutputTokens: 2600,
       },
-    }),
-  });
+    },
+    { maxAttempts: 1 },
+  );
 
-  const data = await readJsonResponse(response, 'Gemini 推荐整理失败');
-  return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
-}
-
-async function fetchWithTimeout(input: string, init: RequestInit) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
-
+  const data = await readJsonResponse(response, 'Gemini 推荐整理失败', apiKey);
   try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-    });
+    return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
   } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error('AI 调用超时。');
+    if (error instanceof RecommendationRefinerError) {
+      throw error;
     }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+    throw new RecommendationRefinerError(
+      'invalid_response',
+      error instanceof Error ? error.message : 'Gemini returned an invalid recommendation response.',
+    );
   }
 }
 
@@ -110,6 +107,7 @@ function parseRefinedRecommendationsJson(
       returnedItems: items.length,
       sourceItems: sourceRecommendations.length,
     });
+    throw new RecommendationRefinerError('invalid_response', 'Gemini returned an invalid recommendation response.');
   }
 
   return refined;
@@ -193,40 +191,19 @@ function recommendationKey(recipeId: string | undefined, chunkId: string | undef
   return `${recipeId ?? ''}::${chunkId ?? ''}::${id}`;
 }
 
-async function readJsonResponse(response: Response, fallbackMessage: string) {
-  const text = await response.text();
-  let data: unknown = null;
-
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
+async function readJsonResponse(response: Response, fallbackMessage: string, apiKey: string) {
+  const { data, providerErrorMessage } = await readGeminiJsonResponse(response, apiKey);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) || `${fallbackMessage} (${response.status})`);
+    const code: RecommendationRefinerFailureCode = response.status === 401 || response.status === 403
+      ? 'authentication'
+      : response.status === 429
+        ? 'quota'
+        : 'provider';
+    throw new RecommendationRefinerError(code, providerErrorMessage || `${fallbackMessage} (${response.status})`);
   }
 
   return data;
-}
-
-function readProviderError(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-
-  const root = data as Record<string, unknown>;
-  const error = root.error;
-  if (!error || typeof error !== 'object') {
-    return null;
-  }
-
-  const message = (error as Record<string, unknown>).message;
-  return typeof message === 'string' ? message : null;
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
