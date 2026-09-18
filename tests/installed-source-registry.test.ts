@@ -7,6 +7,7 @@ import {
 import {
   createEmbeddingModelRegistry,
   EMBEDDING_MODEL_REGISTRY_KEY,
+  selectActiveEmbeddingModel,
 } from '../src/rag/model/model-registry-store.ts';
 import {
   createInstalledSourceDiagnostic,
@@ -153,7 +154,6 @@ for (const [label, raw, code] of unreadableValues) {
     const result = await models.read();
     assert.equal(result.status, 'unreadable');
     await assertRegistryError(() => models.list(), code);
-    await assertRegistryError(() => models.getActive(), code);
     await assertRegistryError(() => models.save(model), code);
 
     assert.equal(store.values[EMBEDDING_MODEL_REGISTRY_KEY], raw);
@@ -198,9 +198,9 @@ test('remove, enable, and disable mutate only readable registries', async () => 
   assert.deepEqual((await datasets.list()).map((item) => item.id), [unverifiedDataset.id]);
 
   const models = createEmbeddingModelRegistry(new MemoryStore());
-  assert.equal(await models.getActive(), null);
+  assert.equal(selectActiveEmbeddingModel(await models.list()), null);
   await models.save({ ...model, active: false });
-  assert.equal((await models.getActive())?.id, model.id);
+  assert.equal(selectActiveEmbeddingModel(await models.list())?.id, model.id);
 });
 
 test('diagnostics contain only the registry category, safe code, and versions', async () => {

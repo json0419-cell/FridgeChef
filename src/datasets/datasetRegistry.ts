@@ -1,17 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isInstalledArtifactPresent } from '../downloads/installed-artifact-presence';
+import { createReconciledInstalledSourceReader } from '../storage/installed-source-presence';
 import type { DatasetPackManifest, InstalledDataset } from '../types';
 import { createDatasetRegistry, DATASET_REGISTRY_KEY } from './dataset-registry-store';
 
 const registry = createDatasetRegistry(AsyncStorage);
+// Records are reconciled against the files on disk, so a record restored from backup without its
+// pack is reported as not installed rather than as a usable recipe source.
+const installed = createReconciledInstalledSourceReader(registry, isInstalledArtifactPresent);
 
-export function readInstalledDatasetRegistry() {
-  return registry.read();
-}
+export const readInstalledDatasetRegistry = installed.read;
 
-/** Throws InstalledSourceRegistryError when the registry is unreadable; it never reports an unreadable registry as empty. */
-export function listInstalledDatasets(): Promise<InstalledDataset[]> {
-  return registry.list();
-}
+export const listInstalledDatasets = installed.list;
+
+/** Installing reads this so a reinstall can carry a restored record's enabled state over. */
+export const listStoredInstalledDatasets = installed.listStored;
 
 export function saveInstalledDataset(dataset: InstalledDataset): Promise<void> {
   return registry.save(dataset);

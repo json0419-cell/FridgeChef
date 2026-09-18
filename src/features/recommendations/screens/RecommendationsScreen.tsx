@@ -34,7 +34,13 @@ import {
   normalizeRecommendationSignatureText as normalizeSignatureText,
 } from '../recommendation-input';
 import { loadRecommendationReadiness } from '../recommendation-readiness';
-import type { RecommendationReadiness } from '../recommendation-readiness-policy';
+import {
+  isRecommendationSetupStepReady,
+  RECOMMENDATION_SETUP_STEP_TITLE_KEYS,
+  RECOMMENDATION_SETUP_STEPS,
+  type RecommendationReadiness,
+  type RecommendationSetupStep,
+} from '../recommendation-readiness-policy';
 import type {
   AppSettings,
   RecommendationsStackScreenProps,
@@ -1055,16 +1061,28 @@ function ReadinessChecklist({
   const styles = useRecommendationStyles();
   const modelDownloadPercent = readModelDownloadPercent(modelProgress);
 
+  // The checklist is a setup aid, so it leaves once there is nothing left to set up.
   if (readiness.ready) {
     return null;
   }
 
-  const items = [
-    { key: 'consent', label: t('recommendations.readinessConsent'), ready: readiness.consentReady, onPress: onOpenConsent },
-    { key: 'credential', label: t('recommendations.readinessCredential'), ready: readiness.credentialReady, onPress: onOpenCredential },
-    { key: 'model', label: t('recommendations.readinessModel'), ready: readiness.modelReady, onPress: onOpenModel, busy: modelDownloading, busyStatus: formatModelDownloadStatus(modelProgress, t) },
-    { key: 'source', label: t('recommendations.readinessSource'), ready: readiness.sourceReady, onPress: onOpenSource },
-  ];
+  const openStep: Record<RecommendationSetupStep, () => void> = {
+    consent: onOpenConsent,
+    credential: onOpenCredential,
+    model: onOpenModel,
+    source: onOpenSource,
+  };
+  // Every step is listed, ready or not, so a restored install reads as a checklist of what to set up
+  // again rather than as an unexplained refusal.
+  const items = RECOMMENDATION_SETUP_STEPS.map((step) => ({
+    key: step,
+    label: t(RECOMMENDATION_SETUP_STEP_TITLE_KEYS[step]),
+    ready: isRecommendationSetupStepReady(readiness, step),
+    onPress: openStep[step],
+    // Only the model step has a download to report on.
+    busy: step === 'model' ? modelDownloading : false,
+    busyStatus: step === 'model' ? formatModelDownloadStatus(modelProgress, t) : undefined,
+  }));
 
   return (
     <AppCard style={[styles.minimalCard, styles.readinessCard]}>

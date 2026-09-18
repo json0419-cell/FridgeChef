@@ -15,6 +15,7 @@ src/
   privacy/      AI disclosure and consent state
   rag/          local embedding and retrieval pipeline
   storage/      non-database settings and caches
+  validation/   release-validation fixtures (#27), inert unless selected at build time
   data/         bundled seed data
   types.ts      shared domain and navigation types
 ```
@@ -27,6 +28,8 @@ src/
 4. `shared` must not import from a feature.
 5. Infrastructure/domain modules must not import from `features`.
 6. Cross-feature imports should use the target feature's `index.ts`, not its internal folders.
+7. `validation` sits below `application` so the startup paths that apply a fixture do not depend on
+   the composition root. It must not import from `features` or `application`.
 
 ## Feature layout
 

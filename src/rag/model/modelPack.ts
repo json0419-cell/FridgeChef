@@ -17,7 +17,7 @@ import {
 } from '../../downloads/temporary-download-artifacts';
 import {
   createInstalledEmbeddingModelFromManifest,
-  listInstalledEmbeddingModels,
+  listStoredInstalledEmbeddingModels,
   saveInstalledEmbeddingModel,
 } from './modelRegistry';
 import { validateEmbeddingModelManifest } from './model-manifest';
@@ -91,7 +91,7 @@ async function installEmbeddingModelPack(
 ): Promise<InstalledEmbeddingModel> {
   const manifest = await fetchEmbeddingModelManifest(normalizedManifestUrl);
   // Read the registry before touching files so an unreadable registry refuses the install up front.
-  const existingModels = await listInstalledEmbeddingModels();
+  const existingModels = await listStoredInstalledEmbeddingModels();
   const existingModel = existingModels.find((item) => item.id === manifest.id);
   const root = getModelsRootDirectory();
   ensureDirectory(root);

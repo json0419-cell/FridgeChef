@@ -32,6 +32,10 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   const { language, t } = useI18n();
   const { showFeedback } = useFeedback();
   const [datasets, setDatasets] = useState<InstalledDataset[]>([]);
+  // Records restored without their files. An Official DatasetPack among them simply reappears in the
+  // official list as downloadable, but an Unverified DatasetPack has no catalogue entry to fall back
+  // on, so it is listed here or its record would be unreachable.
+  const [missingDatasets, setMissingDatasets] = useState<InstalledDataset[]>([]);
   const [officialDatasets, setOfficialDatasets] = useState<DatasetIndexEntry[]>([]);
   const [userLibraryCount, setUserLibraryCount] = useState(0);
   const [enabledUserLibraryCount, setEnabledUserLibraryCount] = useState(0);
@@ -64,9 +68,11 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       const result = await readInstalledDatasetRegistry();
       if (result.status === 'readable') {
         setDatasets(result.records);
+        setMissingDatasets(result.missing);
         setRegistryDiagnostic(null);
       } else {
         setDatasets([]);
+        setMissingDatasets([]);
         setRegistryDiagnostic(createInstalledSourceDiagnostic(result.error));
       }
     } finally {
@@ -104,10 +110,14 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   }, [t]);
 
   const installedDatasetsById = useMemo(() => new Map(datasets.map((dataset) => [dataset.id, dataset])), [datasets]);
-  const customDatasets = useMemo(
-    () => datasets.filter((dataset) => !officialDatasets.some((official) => official.id === dataset.id)),
-    [datasets, officialDatasets],
-  );
+  const customDatasets = useMemo(() => {
+    const isCustom = (dataset: InstalledDataset) =>
+      !officialDatasets.some((official) => official.id === dataset.id);
+    return [
+      ...datasets.filter(isCustom).map((dataset) => ({ dataset, missing: false })),
+      ...missingDatasets.filter(isCustom).map((dataset) => ({ dataset, missing: true })),
+    ];
+  }, [datasets, missingDatasets, officialDatasets]);
 
   useFocusEffect(
     useCallback(() => {
@@ -324,8 +334,8 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         {customDatasets.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('dataset.custom')}</Text>
-            {customDatasets.map((dataset) => (
-              <InstalledDatasetCard key={dataset.id} dataset={dataset} onToggle={toggleDataset} onRemove={remove} language={language} t={t} />
+            {customDatasets.map(({ dataset, missing }) => (
+              <InstalledDatasetCard key={dataset.id} dataset={dataset} missing={missing} onToggle={toggleDataset} onRemove={remove} language={language} t={t} />
             ))}
           </View>
         ) : null}
@@ -386,30 +396,37 @@ function ActionButton({
 
 function InstalledDatasetCard({
   dataset,
+  missing = false,
   onToggle,
   onRemove,
   language,
   t,
 }: {
   dataset: InstalledDataset;
+  missing?: boolean;
   onToggle: (dataset: InstalledDataset) => void;
   onRemove: (dataset: InstalledDataset) => void;
   language: string;
   t: TFunction;
 }) {
+  // A pack whose files are gone cannot be enabled or disabled, so the card offers only the removal
+  // that clears the leftover record, and says why.
   return (
     <View style={styles.officialCard}>
       <View style={styles.cardHeader}>
         <Text style={styles.datasetName}>{formatDatasetName(dataset.name, t)}</Text>
-        <StatusBadge active={dataset.active} t={t} />
+        {missing ? null : <StatusBadge active={dataset.active} t={t} />}
       </View>
       <Text style={styles.meta}>
         {t('dataset.recipeCount', { count: formatCount(dataset.recipeCount, language) })} · {formatBytes(dataset.sizeBytes)}
       </Text>
+      {missing ? <Text style={styles.helperText}>{t('dataset.missingFilesAfterRestore')}</Text> : null}
       <View style={styles.actions}>
-        <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => onToggle(dataset)}>
-          <Text style={styles.linkText}>{dataset.active ? t('dataset.disable') : t('dataset.enable')}</Text>
-        </TouchableOpacity>
+        {missing ? null : (
+          <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => onToggle(dataset)}>
+            <Text style={styles.linkText}>{dataset.active ? t('dataset.disable') : t('dataset.enable')}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => onRemove(dataset)}>
           <Text style={[styles.linkText, styles.deleteText]}>{t('common.delete')}</Text>
         </TouchableOpacity>

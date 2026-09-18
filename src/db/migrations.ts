@@ -4,7 +4,8 @@ export type DatabaseMigrationErrorCode =
   | 'DATABASE_SCHEMA_TOO_NEW'
   | 'DATABASE_SCHEMA_VERSION_INVALID'
   | 'DATABASE_MIGRATION_PATH_MISSING'
-  | 'DATABASE_MIGRATION_FAILED';
+  | 'DATABASE_MIGRATION_FAILED'
+  | 'DATABASE_SEEDING_FAILED';
 
 export class DatabaseMigrationError extends Error {
   readonly code: DatabaseMigrationErrorCode;
@@ -94,7 +95,7 @@ export async function migrateDatabase(database: MigrationDatabase): Promise<numb
   return currentVersion;
 }
 
-async function readSchemaVersion(database: MigrationDatabase) {
+export async function readSchemaVersion(database: MigrationDatabase) {
   const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = Number(row?.user_version ?? 0);
 

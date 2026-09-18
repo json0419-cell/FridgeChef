@@ -16,7 +16,7 @@ import {
 } from '../downloads/pack-security';
 import {
   createInstalledDatasetFromManifest,
-  listInstalledDatasets,
+  listStoredInstalledDatasets,
   removeInstalledDataset,
   saveInstalledDataset,
 } from './datasetRegistry';
@@ -42,7 +42,8 @@ export async function downloadDatasetPack(
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Dataset manifest URL').toString();
   const manifest = await fetchDatasetManifest(normalizedManifestUrl);
   // Read the registry before touching files so an unreadable registry refuses the install up front.
-  await listInstalledDatasets();
+  const existingDatasets = await listStoredInstalledDatasets();
+  const existingDataset = existingDatasets.find((item) => item.id === manifest.id);
 
   const root = getDatasetsRootDirectory();
   ensureDirectory(root);
@@ -134,10 +135,11 @@ export async function downloadDatasetPack(
       stagingDirectory.uri,
       localManifestFile.uri,
       normalizedManifestUrl,
-      // A pack the user just chose to download is a pack they want to retrieve from, so it is
-      // enabled on arrival rather than left as an inert download. The registry keeps a single
-      // active pack, so this replaces the previously active one.
-      true,
+      // A pack the user just chose to download is a pack they want to retrieve from, so a new one
+      // arrives enabled rather than as an inert download; the registry keeps a single active pack,
+      // so that replaces the previously active one. A record that already exists keeps its own
+      // state, which is what carries a restored record's enabled flag across a reinstall.
+      existingDataset?.active ?? true,
     );
     await saveInstalledDataset(installed);
 
