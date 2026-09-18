@@ -8,6 +8,7 @@ import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppFeedbackProvider, Button } from '../shared/components';
 import { initializeDatabase } from '../db/database';
+import { applyStartupValidationFixtures } from '../validation/startup-fixtures.ts';
 import {
   createDatabaseStartupDiagnostic,
   type DatabaseStartupDiagnostic,
@@ -93,6 +94,7 @@ function AppContent() {
   const prepareDatabase = useCallback(async () => {
     setStartupState({ status: 'loading' });
     try {
+      await applyStartupValidationFixtures();
       const [navigationState] = await Promise.all([
         loadNavigationState(),
         initializeDatabase(),

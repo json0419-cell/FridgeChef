@@ -13,7 +13,6 @@ export const EMBEDDING_MODEL_REGISTRY_KEY = 'chi_shen_me.embedding_model_registr
 export interface EmbeddingModelRegistry {
   read(): Promise<RegistryReadResult<InstalledEmbeddingModel>>;
   list(): Promise<InstalledEmbeddingModel[]>;
-  getActive(): Promise<InstalledEmbeddingModel | null>;
   save(model: InstalledEmbeddingModel): Promise<void>;
 }
 
@@ -28,10 +27,6 @@ export function createEmbeddingModelRegistry(store: RegistryStore): EmbeddingMod
   return {
     read: registry.read,
     list: registry.list,
-    async getActive() {
-      const models = await registry.list();
-      return models.find((model) => model.active) ?? models[0] ?? null;
-    },
     save: (model) =>
       registry.update((models) => {
         const next = models.filter((item) => item.id !== model.id);
@@ -39,6 +34,16 @@ export function createEmbeddingModelRegistry(store: RegistryStore): EmbeddingMod
         return normalizeActiveModel(next, model.active ? model.id : undefined);
       }),
   };
+}
+
+/**
+ * The active model among the ones that are actually installed. Callers pass the records they can
+ * use, so a restored record whose files are absent cannot become the active model.
+ */
+export function selectActiveEmbeddingModel(
+  models: readonly InstalledEmbeddingModel[],
+): InstalledEmbeddingModel | null {
+  return models.find((model) => model.active) ?? models[0] ?? null;
 }
 
 function normalizeActiveModel(models: InstalledEmbeddingModel[], activeModelId?: string) {

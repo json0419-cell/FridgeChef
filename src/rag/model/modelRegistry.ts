@@ -1,20 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isInstalledArtifactPresent } from '../../downloads/installed-artifact-presence';
+import { createReconciledInstalledSourceReader } from '../../storage/installed-source-presence';
 import type { EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
-import { createEmbeddingModelRegistry, EMBEDDING_MODEL_REGISTRY_KEY } from './model-registry-store';
+import {
+  createEmbeddingModelRegistry,
+  EMBEDDING_MODEL_REGISTRY_KEY,
+  selectActiveEmbeddingModel,
+} from './model-registry-store';
 
 const registry = createEmbeddingModelRegistry(AsyncStorage);
+// Records are reconciled against the files on disk, so a record restored from backup without its
+// model files is reported as not installed rather than as a usable model.
+const installed = createReconciledInstalledSourceReader(registry, isInstalledArtifactPresent);
 
-export function readInstalledEmbeddingModelRegistry() {
-  return registry.read();
-}
+export const readInstalledEmbeddingModelRegistry = installed.read;
 
-/** Throws InstalledSourceRegistryError when the registry is unreadable; it never reports an unreadable registry as empty. */
-export function listInstalledEmbeddingModels(): Promise<InstalledEmbeddingModel[]> {
-  return registry.list();
-}
+export const listInstalledEmbeddingModels = installed.list;
 
-export function getActiveEmbeddingModel(): Promise<InstalledEmbeddingModel | null> {
-  return registry.getActive();
+/** Installing reads this so a reinstall can carry a restored record's enabled state over. */
+export const listStoredInstalledEmbeddingModels = installed.listStored;
+
+export async function getActiveEmbeddingModel(): Promise<InstalledEmbeddingModel | null> {
+  return selectActiveEmbeddingModel(await installed.list());
 }
 
 export function saveInstalledEmbeddingModel(model: InstalledEmbeddingModel): Promise<void> {

@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { applyDatabaseUpgradeFixture } from '../validation/release-fixtures.ts';
 import recipes from '../data/processed_recipes.json';
 import type { Recipe } from '../types';
 import { migrateDatabase } from './migrations';
@@ -19,6 +20,8 @@ export async function initializeDatabase() {
   const db = await getDatabase();
 
   await db.execAsync('PRAGMA journal_mode = WAL;');
+  // No-op unless this build selected the release-validation fixture (#27).
+  await applyDatabaseUpgradeFixture(db);
   await migrateDatabase(db);
 
   await seedRecipes(db);
