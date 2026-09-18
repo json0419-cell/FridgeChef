@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "chishenme.embedding-model-pack.v1",
+  "id": "bge-m3-query-onnx",
+  "name": "BGE-M3 Query ONNX",
+  "version": "2026.09.18",
+  "description": "BAAI/bge-m3 ONNX query embedding model for Android local RAG. uint8 dynamic-quantized weights; the embedding output stays float32.",
+  "createdAt": "2026-09-18T00:00:00Z",
+  "provider": "onnxruntime-react-native",
+  "model": {
+    "name": "BAAI/bge-m3",
+    "dimension": 1024,
+    "dtype": "float32",
+    "normalized": true,
+    "maxLength": 512,
+    "inputMode": "string-tokenizer-onnx"
+  },
+  "files": [
+    {
+      "role": "modelOnnx",
+      "path": "files/model-uint8.onnx",
+      "sizeBytes": 568599142,
+      "sha256": "f6a1004d75cf98b458f69306c589233981bfd29676a3550f434fe1c0435f5dfd"
+    },
+    {
+      "role": "config",
+      "path": "files/config.json",
+      "sizeBytes": 698,
+      "sha256": "f24afd5de914fba8c668426c43d208a1a54022500c63b2c160be20891686fce8"
+    },
+    {
+      "role": "tokenizerJson",
+      "path": "files/tokenizer.json",
+      "sizeBytes": 17082821,
+      "sha256": "6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790"
+    },
+    {
+      "role": "sentencepiece",
+      "path": "files/sentencepiece.bpe.model",
+      "sizeBytes": 5069051,
+      "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"
+    }
+  ]
+}

@@ -1,35 +1,36 @@
 import { Directory, File } from 'expo-file-system';
 import * as ort from 'onnxruntime-react-native';
 import type { EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
+import { readAvailableMemoryBytes } from '../model/device-memory.ts';
+import { assertSufficientMemoryForModelLoad } from '../model/model-memory-policy.ts';
+import { loadUnigramTokenizerFromPack } from './tokenizer-pack.ts';
+import type { UnigramTokenizer } from './unigram-tokenizer.ts';
 
 export class BgeM3OnnxEmbedder {
-  private tokenizerSession: ort.InferenceSession | null = null;
+  private readonly installedModel: InstalledEmbeddingModel;
+  private tokenizer: UnigramTokenizer | null = null;
   private modelSession: ort.InferenceSession | null = null;
   private manifest: EmbeddingModelPackManifest | null = null;
 
-  constructor(private readonly installedModel: InstalledEmbeddingModel) {}
+  constructor(installedModel: InstalledEmbeddingModel) {
+    this.installedModel = installedModel;
+  }
 
   async embed(text: string): Promise<Float32Array> {
     await this.ensureLoaded();
 
-    if (!this.tokenizerSession || !this.modelSession || !this.manifest) {
+    if (!this.tokenizer || !this.modelSession || !this.manifest) {
       throw new Error('ONNX 模型尚未加载。');
     }
 
-    const tokenizerInputName = this.tokenizerSession.inputNames[0];
-    const tokenizerFeeds: Record<string, ort.Tensor> = {
-      [tokenizerInputName]: new ort.Tensor('string', [text], [1]),
-    };
-    const tokenOutputs = await this.tokenizerSession.run(tokenizerFeeds);
-
-    const modelFeeds = this.buildModelFeeds(tokenOutputs);
-    const modelOutputs = await this.modelSession.run(modelFeeds);
+    const encoded = this.tokenizer.encode(text);
+    const modelOutputs = await this.modelSession.run(this.buildModelFeeds(encoded.inputIds, encoded.attentionMask));
     const embedding = this.pickEmbeddingOutput(modelOutputs);
     return l2Normalize(embedding);
   }
 
   private async ensureLoaded() {
-    if (this.tokenizerSession && this.modelSession && this.manifest) {
+    if (this.tokenizer && this.modelSession && this.manifest) {
       return;
     }
 
@@ -37,34 +38,42 @@ export class BgeM3OnnxEmbedder {
     const manifestFile = new File(this.installedModel.manifestUri);
     this.manifest = (await manifestFile.json()) as EmbeddingModelPackManifest;
 
-    const tokenizerFile = findModelFile(root, this.manifest, 'tokenizerOnnx');
+    // Checked before the tokenizer so an impossible load fails without first spending memory on it,
+    // and on every load rather than only at install time.
+    assertSufficientMemoryForModelLoad(
+      weightBytes(this.manifest),
+      await readAvailableMemoryBytes(),
+      this.installedModel.name,
+    );
+
+    const tokenizerFile = findModelFile(root, this.manifest, 'tokenizerJson');
     const modelFile = findModelFile(root, this.manifest, 'modelOnnx');
 
-    this.tokenizerSession = await ort.InferenceSession.create(tokenizerFile.uri);
+    this.tokenizer = await loadUnigramTokenizerFromPack(this.installedModel, tokenizerFile);
+
     this.modelSession = await ort.InferenceSession.create(modelFile.uri);
   }
 
-  private buildModelFeeds(tokenOutputs: ort.InferenceSession.ReturnType): Record<string, ort.Tensor> {
+  private buildModelFeeds(inputIds: number[], attentionMask: number[]): Record<string, ort.Tensor> {
     if (!this.modelSession) {
       throw new Error('ONNX 模型尚未加载。');
     }
 
-    const fallbackTokenFeeds = buildSingleTextTokenFeeds(tokenOutputs);
+    const dims = [1, inputIds.length];
     const feeds: Record<string, ort.Tensor> = {};
     for (const inputName of this.modelSession.inputNames) {
-      const tokenTensor = tokenOutputs[inputName] ?? findTokenOutput(tokenOutputs, inputName);
-      if (tokenTensor) {
-        feeds[inputName] = tokenTensor as ort.Tensor;
-        continue;
-      }
-
-      if (fallbackTokenFeeds[inputName]) {
-        feeds[inputName] = fallbackTokenFeeds[inputName];
-        continue;
-      }
-
-      {
-        throw new Error(`Tokenizer output 中找不到模型输入：${inputName}`);
+      switch (normalizeName(inputName)) {
+        case 'inputids':
+          feeds[inputName] = new ort.Tensor('int64', toBigInt64(inputIds), dims);
+          break;
+        case 'attentionmask':
+          feeds[inputName] = new ort.Tensor('int64', toBigInt64(attentionMask), dims);
+          break;
+        case 'tokentypeids':
+          feeds[inputName] = new ort.Tensor('int64', new BigInt64Array(inputIds.length), dims);
+          break;
+        default:
+          throw new Error(`Tokenizer 无法提供模型输入：${inputName}`);
       }
     }
 
@@ -102,6 +111,13 @@ export class BgeM3OnnxEmbedder {
   }
 }
 
+/** The graph plus any external initializer file; everything ONNX Runtime pulls into memory. */
+function weightBytes(manifest: EmbeddingModelPackManifest) {
+  return manifest.files
+    .filter((file) => file.role === 'modelOnnx' || file.role === 'externalData')
+    .reduce((total, file) => total + file.sizeBytes, 0);
+}
+
 function findModelFile(root: Directory, manifest: EmbeddingModelPackManifest, role: string) {
   const entry = manifest.files.find((file) => file.role === role);
   if (!entry) {
@@ -120,54 +136,12 @@ function findModelFile(root: Directory, manifest: EmbeddingModelPackManifest, ro
   return new File(current, parts[parts.length - 1]);
 }
 
-function findTokenOutput(outputs: ort.InferenceSession.ReturnType, inputName: string) {
-  const normalizedInputName = normalizeName(inputName);
-  const outputKey = Object.keys(outputs).find((key) => normalizeName(key) === normalizedInputName);
-  return outputKey ? outputs[outputKey] : undefined;
-}
-
-function buildSingleTextTokenFeeds(outputs: ort.InferenceSession.ReturnType): Record<string, ort.Tensor> {
-  const tokensTensor = outputs.tokens as ort.Tensor | undefined;
-  if (!tokensTensor || !('data' in tokensTensor)) {
-    return {};
+function toBigInt64(values: number[]) {
+  const output = new BigInt64Array(values.length);
+  for (let index = 0; index < values.length; index += 1) {
+    output[index] = BigInt(values[index]);
   }
-
-  const tokenIds = tensorDataToBigInt64(tokensTensor.data);
-  if (!tokenIds) {
-    return {};
-  }
-
-  const attentionMask = new BigInt64Array(tokenIds.length);
-  attentionMask.fill(1n);
-
-  return {
-    input_ids: new ort.Tensor('int64', tokenIds, [1, tokenIds.length]),
-    attention_mask: new ort.Tensor('int64', attentionMask, [1, tokenIds.length]),
-  };
-}
-
-function tensorDataToBigInt64(data: unknown) {
-  if (data instanceof BigInt64Array) {
-    return data;
-  }
-
-  if (data instanceof Int32Array || data instanceof Uint32Array || data instanceof Int16Array || data instanceof Uint16Array) {
-    const output = new BigInt64Array(data.length);
-    for (let index = 0; index < data.length; index += 1) {
-      output[index] = BigInt(data[index]);
-    }
-    return output;
-  }
-
-  if (Array.isArray(data)) {
-    const output = new BigInt64Array(data.length);
-    for (let index = 0; index < data.length; index += 1) {
-      output[index] = BigInt(Number(data[index]));
-    }
-    return output;
-  }
-
-  return null;
+  return output;
 }
 
 function normalizeName(value: string) {
