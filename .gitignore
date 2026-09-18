@@ -63,6 +63,7 @@ android/captures/
 # Android build artifacts
 android/build/
 android/app/build/
+modules/*/android/build/
 android/app/.cxx/
 android/app/.externalNativeBuild/
 android/app/release/
