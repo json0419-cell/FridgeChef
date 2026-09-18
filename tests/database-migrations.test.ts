@@ -1,80 +1,164 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import { DATABASE_SCHEMA_VERSION, DatabaseMigrationError } from '../src/db/migrations.ts';
+import { createDatabaseStartup, type BaseRecipe } from '../src/db/database-startup.ts';
 import {
-  DATABASE_SCHEMA_VERSION,
-  DatabaseMigrationError,
-  migrateDatabase,
-  type MigrationDatabase,
-} from '../src/db/migrations.ts';
-import { createDatabaseStartupDiagnostic } from '../src/db/database-diagnostics.ts';
+  createDatabaseStartupDiagnostic,
+  formatDatabaseStartupDiagnostic,
+} from '../src/db/database-diagnostics.ts';
+import { SqliteTestDatabase, USER_DATA_TABLES, type FailureInjector } from './support/sqlite-test-database.ts';
 import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
 
-const schemaV1 = readFileSync('tests/fixtures/database-schema-v1.sql', 'utf8');
-const schemaV2 = readFileSync('tests/fixtures/database-schema-v2.sql', 'utf8');
+const baseRecipes: BaseRecipe[] = [
+  {
+    id: 'r001',
+    title: 'Bundled egg recipe',
+    mainIngredients: ['egg'],
+    seasonings: ['salt'],
+    steps: ['Whisk the eggs.', 'Cook until set.'],
+    tags: ['quick'],
+  },
+  {
+    id: 'r002',
+    title: 'Bundled tomato recipe',
+    mainIngredients: ['tomato', 'egg'],
+    seasonings: [],
+    steps: ['Cook the tomato.'],
+    tags: [],
+  },
+];
 
-test('a fresh database migrates to the latest public schema', async (context) => {
-  const fixture = new MigrationFixture();
-  context.after(() => fixture.close());
+const seededRecipeRows = [
+  {
+    id: 'r001',
+    title: 'Bundled egg recipe',
+    mainIngredients: '["egg"]',
+    seasonings: '["salt"]',
+    steps: '["Whisk the eggs.","Cook until set."]',
+    tags: '["quick"]',
+  },
+  {
+    id: 'r002',
+    title: 'Bundled tomato recipe',
+    mainIngredients: '["tomato","egg"]',
+    seasonings: '[]',
+    steps: '["Cook the tomato."]',
+    tags: '[]',
+  },
+];
 
-  const version = await migrateDatabase(fixture);
+function fixturePaths(version: number) {
+  return [`tests/fixtures/database-schema-v${version}.sql`, `tests/fixtures/database-data-v${version}.sql`];
+}
 
-  assert.equal(version, DATABASE_SCHEMA_VERSION);
-  assert.equal(fixture.version(), 2);
+function loadFixture(database: SqliteTestDatabase, version: number) {
+  for (const path of fixturePaths(version)) {
+    database.exec(readFileSync(path, 'utf8'));
+  }
+}
+
+function openFixture(version: number, failWhen?: FailureInjector) {
+  const database = new SqliteTestDatabase(':memory:', failWhen);
+  loadFixture(database, version);
+  return database;
+}
+
+function startupFor(database: SqliteTestDatabase) {
+  return createDatabaseStartup({ openDatabase: async () => database, baseRecipes });
+}
+
+function failOnRecipeInsert(occurrence: number): FailureInjector {
+  let inserts = 0;
+  return (source) => /INSERT OR REPLACE INTO recipes/.test(source) && ++inserts === occurrence;
+}
+
+// Every public schema version must keep a historical fixture, an upgrade-to-current test,
+// and an idempotent re-initialization test. Generating them from DATABASE_SCHEMA_VERSION
+// makes a new version fail here until its fixture is added.
+for (let version = 1; version <= DATABASE_SCHEMA_VERSION; version += 1) {
+  test(`schema version ${version} has a historical schema and data fixture`, () => {
+    for (const path of fixturePaths(version)) {
+      assert.equal(existsSync(path), true, `Missing ${path}`);
+    }
+  });
+
+  test(`schema version ${version} upgrades to the current schema with the Base Recipe Library seeded`, async (context) => {
+    const database = openFixture(version);
+    context.after(() => database.close());
+    assert.equal(database.version(), version);
+    const before = database.snapshot();
+
+    await startupFor(database).initializeDatabase();
+
+    assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+    assert.deepEqual(database.snapshotLike(before, USER_DATA_TABLES), withoutRecipes(before));
+    assert.deepEqual(database.rows('recipes'), seededRecipeRows);
+  });
+
+  test(`schema version ${version} is stable when initialization runs again`, async (context) => {
+    const database = openFixture(version);
+    context.after(() => database.close());
+
+    await startupFor(database).initializeDatabase();
+    const afterFirst = database.snapshot();
+    await startupFor(database).initializeDatabase();
+
+    assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+    assert.deepEqual(database.snapshot(), afterFirst);
+  });
+}
+
+test('a fresh database reaches the current schema with the Base Recipe Library seeded', async (context) => {
+  const database = new SqliteTestDatabase();
+  context.after(() => database.close());
+
+  await startupFor(database).initializeDatabase();
+
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
   assert.deepEqual(
-    fixture.tableNames(),
+    database.tableNames(),
     ['cooked_history', 'ingredients', 'personal_recipe_embeddings', 'recipes', 'user_recipe_libraries', 'user_recipes'],
   );
-  assert.equal(fixture.columnNames('user_recipes').includes('enabled'), true);
-});
-
-test('schema version 1 upgrades records to version 2 without replacing them', async (context) => {
-  const fixture = new MigrationFixture();
-  context.after(() => fixture.close());
-  fixture.exec(schemaV1);
-  fixture.exec(sampleRecipeSql);
-
-  await migrateDatabase(fixture);
-
-  assert.equal(fixture.version(), 2);
-  assert.deepEqual(fixture.sampleRecipe(), { enabled: 1, id: 'recipe-1', title: 'Preserved recipe' });
-});
-
-test('schema version 2 is stable when initialization runs again', async (context) => {
-  const fixture = new MigrationFixture();
-  context.after(() => fixture.close());
-  fixture.exec(schemaV2);
-  fixture.exec(sampleRecipeSql);
-
-  await migrateDatabase(fixture);
-  await migrateDatabase(fixture);
-
-  assert.equal(fixture.version(), 2);
-  assert.deepEqual(fixture.sampleRecipe(), { enabled: 1, id: 'recipe-1', title: 'Preserved recipe' });
+  assert.deepEqual(database.rows('recipes'), seededRecipeRows);
 });
 
 test('an unversioned database from the existing app is adopted without data loss', async (context) => {
-  const fixture = new MigrationFixture();
-  context.after(() => fixture.close());
-  fixture.exec(schemaV2);
-  fixture.exec('PRAGMA user_version = 0;');
-  fixture.exec(sampleRecipeSql);
+  const database = openFixture(2);
+  context.after(() => database.close());
+  database.exec('PRAGMA user_version = 0;');
+  const before = database.snapshot();
 
-  await migrateDatabase(fixture);
+  await startupFor(database).initializeDatabase();
 
-  assert.equal(fixture.version(), 2);
-  assert.deepEqual(fixture.sampleRecipe(), { enabled: 1, id: 'recipe-1', title: 'Preserved recipe' });
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+  assert.deepEqual(database.snapshotLike(before, USER_DATA_TABLES), withoutRecipes(before));
 });
 
-test('a failed migration rolls back schema changes and preserves original data', async (context) => {
-  const fixture = new MigrationFixture(/idx_user_recipes_enabled_library_updatedAt/);
-  context.after(() => fixture.close());
-  fixture.exec(schemaV1);
-  fixture.exec(sampleRecipeSql);
+test('a database newer than the app is rejected without changes', async (context) => {
+  const database = openFixture(2);
+  context.after(() => database.close());
+  database.exec(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION + 1};`);
+  const before = database.snapshot();
 
   await assert.rejects(
-    () => migrateDatabase(fixture),
+    () => startupFor(database).initializeDatabase(),
+    (error) => error instanceof DatabaseMigrationError && error.code === 'DATABASE_SCHEMA_TOO_NEW',
+  );
+
+  assert.deepEqual(database.snapshot(), before);
+});
+
+test('an injected migration failure preserves the schema and every table from the fixture', async (context) => {
+  const database = openFixture(1, (source) => /idx_user_recipes_enabled_library_updatedAt/.test(source));
+  context.after(() => database.close());
+  const before = database.snapshot();
+
+  await assert.rejects(
+    () => startupFor(database).initializeDatabase(),
     (error) =>
       error instanceof DatabaseMigrationError &&
       error.code === 'DATABASE_MIGRATION_FAILED' &&
@@ -82,114 +166,186 @@ test('a failed migration rolls back schema changes and preserves original data',
       error.toVersion === 2,
   );
 
-  assert.equal(fixture.version(), 1);
-  assert.equal(fixture.columnNames('user_recipes').includes('enabled'), false);
-  assert.deepEqual(fixture.sampleRecipe(false), { id: 'recipe-1', title: 'Preserved recipe' });
+  assert.equal(database.version(), 1);
+  assert.equal(database.columnNames('user_recipes').includes('enabled'), false);
+  assert.deepEqual(database.snapshot(), before);
+});
+
+test('an injected failure mid-seed leaves the prior recipes and all user tables unchanged', async (context) => {
+  const database = openFixture(2, failOnRecipeInsert(2));
+  context.after(() => database.close());
+  const before = database.snapshot();
+
+  await assert.rejects(
+    () => startupFor(database).initializeDatabase(),
+    (error) =>
+      error instanceof DatabaseMigrationError &&
+      error.code === 'DATABASE_SEEDING_FAILED' &&
+      error.fromVersion === 2 &&
+      error.toVersion === 2,
+  );
+
+  assert.deepEqual(database.snapshot(), before);
+});
+
+test('a seeding failure after an upgrade reports the original version and preserves user data', async (context) => {
+  const database = openFixture(1, failOnRecipeInsert(2));
+  context.after(() => database.close());
+  const before = database.snapshot();
+
+  await assert.rejects(
+    () => startupFor(database).initializeDatabase(),
+    (error) =>
+      error instanceof DatabaseMigrationError &&
+      error.code === 'DATABASE_SEEDING_FAILED' &&
+      error.fromVersion === 1 &&
+      error.toVersion === DATABASE_SCHEMA_VERSION,
+  );
+
+  assert.deepEqual(database.snapshotLike(before), before);
+});
+
+test('retrying after a transient seeding failure succeeds without data loss', async (context) => {
+  const database = openFixture(1, failOnRecipeInsert(1));
+  context.after(() => database.close());
+  const before = database.snapshot();
+  const startup = startupFor(database);
+
+  await assert.rejects(() => startup.initializeDatabase());
+  await startup.initializeDatabase();
+
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+  assert.deepEqual(database.snapshotLike(before, USER_DATA_TABLES), withoutRecipes(before));
+  assert.deepEqual(database.rows('recipes'), seededRecipeRows);
+});
+
+test('retrying after the database failed to open opens it again', async (context) => {
+  const database = openFixture(2);
+  context.after(() => database.close());
+  let attempts = 0;
+  const startup = createDatabaseStartup({
+    openDatabase: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('Transient open failure');
+      }
+      return database;
+    },
+    baseRecipes,
+  });
+
+  await assert.rejects(() => startup.initializeDatabase());
+  await startup.initializeDatabase();
+
+  assert.equal(attempts, 2);
+  assert.equal(await startup.getDatabase(), database);
+  assert.deepEqual(database.rows('recipes'), seededRecipeRows);
+});
+
+test('initialization resolves only after migration and seeding are committed', async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), 'fridgechef-db-'));
+  const path = join(directory, 'startup.db');
+  const database = new SqliteTestDatabase(path);
+  loadFixture(database, 1);
+  context.after(() => {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  await startupFor(database).initializeDatabase();
+
+  const otherConnection = new DatabaseSync(path, { readOnly: true });
+  try {
+    const version = otherConnection.prepare('PRAGMA user_version').get() as { user_version: number };
+    const recipeIds = otherConnection.prepare('SELECT id FROM recipes ORDER BY id').all();
+    assert.equal(Number(version.user_version), DATABASE_SCHEMA_VERSION);
+    assert.deepEqual(recipeIds.map((row) => ({ ...row })), [{ id: 'r001' }, { id: 'r002' }]);
+  } finally {
+    otherConnection.close();
+  }
 });
 
 test('startup diagnostics expose only recovery metadata', () => {
   const secret = SENTINEL_API_KEY;
   const error = new DatabaseMigrationError(
-    'DATABASE_MIGRATION_FAILED',
+    'DATABASE_SEEDING_FAILED',
     `Failed near ingredient data and ${secret}`,
     1,
     2,
+    { cause: new Error('Fixture egg, Preserved recipe, no peanuts') },
   );
 
   const diagnostic = createDatabaseStartupDiagnostic(error, new Date('2026-09-10T12:00:00.000Z'));
-  const serialized = JSON.stringify(diagnostic);
 
   assert.deepEqual(diagnostic, {
-    code: 'DATABASE_MIGRATION_FAILED',
+    code: 'DATABASE_SEEDING_FAILED',
     occurredAt: '2026-09-10T12:00:00.000Z',
     fromVersion: 1,
     targetVersion: 2,
   });
-  assert.equal(serialized.includes(secret), false);
-  assert.equal(serialized.includes('ingredient'), false);
 });
 
-const sampleRecipeSql = `
-  INSERT INTO user_recipe_libraries (id, name, enabled, createdAt, updatedAt)
-  VALUES ('library-1', 'Fixture library', 1, '2026-09-10T00:00:00.000Z', '2026-09-10T00:00:00.000Z');
-
-  INSERT INTO user_recipes (
-    id, libraryId, title, description, mainIngredients, seasonings, steps, tags,
-    estimatedTimeMinutes, difficulty, sourceType, sourceUrl, createdAt, updatedAt
-  ) VALUES (
-    'recipe-1', 'library-1', 'Preserved recipe', '', '[]', '[]', '[]', '[]',
-    15, 'easy', 'manual', '', '2026-09-10T00:00:00.000Z', '2026-09-10T00:00:00.000Z'
+test('copyable diagnostic text contains only the code, timestamp, and schema versions', () => {
+  const text = formatDatabaseStartupDiagnostic(
+    {
+      code: 'DATABASE_SEEDING_FAILED',
+      occurredAt: '2026-09-10T12:00:00.000Z',
+      fromVersion: null,
+      targetVersion: 2,
+    },
+    (key, values) => {
+      const templates = {
+        'app.databaseDiagnosticCode': 'Error code: {code}',
+        'app.databaseDiagnosticTime': 'Occurred at: {time}',
+        'app.databaseDiagnosticFromVersion': 'Original database version: {version}',
+        'app.databaseDiagnosticTargetVersion': 'Target database version: {version}',
+        'app.databaseDiagnosticUnknownVersion': 'unknown',
+      };
+      return templates[key].replace(/\{(\w+)\}/g, (_, name: string) => String(values?.[name]));
+    },
   );
-`;
 
-class MigrationFixture implements MigrationDatabase {
-  readonly database = new DatabaseSync(':memory:');
-  private readonly failSource: RegExp | undefined;
+  assert.equal(
+    text,
+    [
+      'Error code: DATABASE_SEEDING_FAILED',
+      'Occurred at: 2026-09-10T12:00:00.000Z',
+      'Original database version: unknown',
+      'Target database version: 2',
+    ].join('\n'),
+  );
+});
 
-  constructor(failSource?: RegExp) {
-    this.failSource = failSource;
-  }
+// The release-validation fixture (#27) refuses the upgrade by marking the schema newer than this
+// build supports, so it is only correct if startup hands it the version the database actually had,
+// before any migration has run. Builds that select no fixture pass nothing and startup is unchanged.
+test('the release-validation fixture runs before any migration, on the version the database had', async (context) => {
+  const database = openFixture(1);
+  context.after(() => database.close());
+  const observed: number[] = [];
 
-  exec(source: string) {
-    this.database.exec(source);
-  }
+  await createDatabaseStartup({
+    openDatabase: async () => database,
+    baseRecipes,
+    applyUpgradeFixture: async (db) => {
+      observed.push(db.version());
+    },
+  }).initializeDatabase();
 
-  async execAsync(source: string) {
-    if (this.failSource?.test(source)) {
-      throw new Error('Injected migration failure');
-    }
-    this.database.exec(source);
-  }
+  assert.deepEqual(observed, [1]);
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+});
 
-  async getAllAsync<T>(source: string) {
-    return this.database.prepare(source).all() as T[];
-  }
+test('startup without a selected fixture still migrates and seeds', async (context) => {
+  const database = openFixture(1);
+  context.after(() => database.close());
 
-  async getFirstAsync<T>(source: string) {
-    return (this.database.prepare(source).get() as T | undefined) ?? null;
-  }
+  await startupFor(database).initializeDatabase();
 
-  async withTransactionAsync(task: () => Promise<void>) {
-    this.database.exec('BEGIN IMMEDIATE;');
-    try {
-      await task();
-      this.database.exec('COMMIT;');
-    } catch (error) {
-      this.database.exec('ROLLBACK;');
-      throw error;
-    }
-  }
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+  assert.deepEqual(database.rows('recipes'), seededRecipeRows);
+});
 
-  version() {
-    return Number((this.database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
-  }
-
-  tableNames() {
-    return this.database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .all()
-      .map((row) => String((row as { name: string }).name));
-  }
-
-  columnNames(table: string) {
-    if (table !== 'user_recipes') {
-      throw new Error('Unsupported fixture table');
-    }
-    return this.database
-      .prepare('PRAGMA table_info(user_recipes)')
-      .all()
-      .map((row) => String((row as { name: string }).name));
-  }
-
-  sampleRecipe(includeEnabled = true) {
-    const columns = includeEnabled ? 'id, title, enabled' : 'id, title';
-    const row = this.database
-      .prepare(`SELECT ${columns} FROM user_recipes WHERE id = 'recipe-1'`)
-      .get() as Record<string, unknown> | undefined;
-    return row ? { ...row } : undefined;
-  }
-
-  close() {
-    this.database.close();
-  }
+function withoutRecipes(snapshot: ReturnType<SqliteTestDatabase['snapshot']>) {
+  return Object.fromEntries(USER_DATA_TABLES.map((table) => [table, snapshot[table]]));
 }
