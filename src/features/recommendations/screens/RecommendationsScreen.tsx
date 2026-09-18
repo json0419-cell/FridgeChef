@@ -8,6 +8,7 @@ import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { getActionAccessibilityState } from '../../../shared/components/control-state';
+import { InstalledSourceRecoveryCard } from '../../../shared/components/InstalledSourceRecoveryCard';
 import {
   RecommendationRefinerError,
   refineRagRecommendationsWithProvider,
@@ -19,6 +20,11 @@ import { downloadEmbeddingModelPack, type ModelDownloadProgress } from '../../..
 import { getRagRecommendations, type RagResult } from '../../../rag/ragService';
 import { loadRecommendationCache, saveRecommendationCache } from '../../../storage/recommendationCacheStorage';
 import { loadRecommendationRequestTags, saveRecommendationRequestTags } from '../../../storage/recommendationTagStorage';
+import {
+  createInstalledSourceDiagnostic,
+  InstalledSourceRegistryError,
+  type InstalledSourceDiagnostic,
+} from '../../../storage/installed-source-registry';
 import { getApiKey, getSettings } from '../../../storage/settingsStorage';
 import { radii, spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import { classifyRecommendationCache } from '../recommendation-cache-policy';
@@ -27,7 +33,13 @@ import {
   normalizeRecommendationSignatureText as normalizeSignatureText,
 } from '../recommendation-input';
 import { loadRecommendationReadiness } from '../recommendation-readiness';
-import type { RecommendationReadiness } from '../recommendation-readiness-policy';
+import {
+  isRecommendationSetupStepReady,
+  RECOMMENDATION_SETUP_STEP_TITLE_KEYS,
+  RECOMMENDATION_SETUP_STEPS,
+  type RecommendationReadiness,
+  type RecommendationSetupStep,
+} from '../recommendation-readiness-policy';
 import type {
   AppSettings,
   RecommendationsStackScreenProps,
@@ -116,6 +128,7 @@ export function RecommendationsScreen({ navigation, route }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [modelDownloading, setModelDownloading] = useState(false);
+  const [registryDiagnostic, setRegistryDiagnostic] = useState<InstalledSourceDiagnostic | null>(null);
   const [modelProgress, setModelProgress] = useState<ModelDownloadProgress | null>(null);
   const [readiness, setReadiness] = useState<RecommendationReadiness>(EMPTY_READINESS);
   const [readinessLoading, setReadinessLoading] = useState(true);
@@ -154,8 +167,10 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     try {
       const next = await loadRecommendationReadiness();
       setReadiness(next);
+      setRegistryDiagnostic(null);
       return next;
-    } catch {
+    } catch (error) {
+      setRegistryDiagnostic(error instanceof InstalledSourceRegistryError ? createInstalledSourceDiagnostic(error) : null);
       setReadiness(EMPTY_READINESS);
       return EMPTY_READINESS;
     } finally {
@@ -647,6 +662,11 @@ export function RecommendationsScreen({ navigation, route }: Props) {
     try {
       await downloadEmbeddingModelPack(undefined, setModelProgress);
       await refreshReadiness();
+    } catch (error) {
+      if (!(error instanceof InstalledSourceRegistryError)) {
+        throw error;
+      }
+      setRegistryDiagnostic(createInstalledSourceDiagnostic(error));
     } finally {
       setModelDownloading(false);
       setModelProgress(null);
@@ -742,11 +762,18 @@ export function RecommendationsScreen({ navigation, route }: Props) {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
+            {registryDiagnostic ? (
+              <InstalledSourceRecoveryCard
+                diagnostic={registryDiagnostic}
+                onRetry={() => void refreshReadiness()}
+                retrying={readinessLoading}
+              />
+            ) : null}
             <ReadinessChecklist
               loading={readinessLoading}
               readiness={readiness}
               onOpenConsent={() => navigation.navigate('PrivacyPolicy', { returnAfterConsent: true })}
-              onOpenCredential={() => navigation.navigate('Settings')}
+              onOpenCredential={() => navigation.navigate('ApiKeySettings')}
               onOpenModel={() => void installOnnxModel()}
               onOpenSource={() => navigation.navigate('MyStack', { screen: 'DatasetLibrary' })}
               t={t}
@@ -1013,12 +1040,20 @@ function ReadinessChecklist({
 }) {
   const { colors: appColors } = useAppTheme();
   const styles = useRecommendationStyles();
-  const items = [
-    { key: 'consent', label: t('recommendations.readinessConsent'), ready: readiness.consentReady, onPress: onOpenConsent },
-    { key: 'credential', label: t('recommendations.readinessCredential'), ready: readiness.credentialReady, onPress: onOpenCredential },
-    { key: 'model', label: t('recommendations.readinessModel'), ready: readiness.modelReady, onPress: onOpenModel },
-    { key: 'source', label: t('recommendations.readinessSource'), ready: readiness.sourceReady, onPress: onOpenSource },
-  ];
+  const openStep: Record<RecommendationSetupStep, () => void> = {
+    consent: onOpenConsent,
+    credential: onOpenCredential,
+    model: onOpenModel,
+    source: onOpenSource,
+  };
+  // Every step is listed, ready or not, so a restored install reads as a checklist of what to set up
+  // again rather than as an unexplained refusal.
+  const items = RECOMMENDATION_SETUP_STEPS.map((step) => ({
+    key: step,
+    label: t(RECOMMENDATION_SETUP_STEP_TITLE_KEYS[step]),
+    ready: isRecommendationSetupStepReady(readiness, step),
+    onPress: openStep[step],
+  }));
 
   return (
     <AppCard style={[styles.minimalCard, styles.readinessCard]}>

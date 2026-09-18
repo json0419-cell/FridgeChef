@@ -12,6 +12,7 @@ import {
   type CredentialStore,
   type OrdinaryStore,
 } from '../src/storage/api-key-storage.ts';
+import { evaluateRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness-policy.ts';
 
 const secureKey = credentialStorageKey('gemini');
 const verificationKey = credentialVerificationStorageKey('gemini');
@@ -141,6 +142,31 @@ test('clearing an API key removes verification before the credential', async () 
   assert.ok(
     operations.indexOf(`secure:remove:${verificationKey}`) < operations.indexOf(`secure:remove:${secureKey}`),
   );
+});
+
+test('clearing the API key blocks Recommendation Ready and keeps every other local record', async () => {
+  const secureStore = new MemoryStore({ [secureKey]: 'saved-secret' });
+  const ordinaryStore = new MemoryStore({
+    [settingsKey]: JSON.stringify({ servings: 2 }),
+    'chi_shen_me.dataset_registry.v1': '{"version":2,"records":[]}',
+    'chi_shen_me.recommendation_cache.v2': '{"refinedRecommendations":[],"cachedAt":"2026-09-10T00:00:00.000Z"}',
+  });
+  await markStoredApiKeyVerified('gemini', secureStore);
+  const otherRecords = new Map(ordinaryStore.values);
+
+  await clearStoredApiKey('gemini', secureStore, ordinaryStore);
+
+  assert.equal(await isStoredApiKeyVerified('gemini', secureStore), false);
+  assert.equal(
+    evaluateRecommendationReadiness({
+      consentReady: true,
+      credentialReady: await isStoredApiKeyVerified('gemini', secureStore),
+      modelReady: true,
+      sourceReady: true,
+    }).ready,
+    false,
+  );
+  assert.deepEqual(ordinaryStore.values, otherRecords);
 });
 
 class MemoryStore implements CredentialStore, OrdinaryStore {

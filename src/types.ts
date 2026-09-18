@@ -342,6 +342,7 @@ export type MainTabParamList = {
 export type RootNativeStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Settings: undefined;
+  ApiKeySettings: undefined;
   DataManagement: undefined;
   PrivacyPolicy: { returnAfterConsent?: boolean } | undefined;
 };
@@ -373,6 +374,7 @@ export type RecipesStackScreenProps<T extends keyof RecipesStackParamList> = MyS
 export type HistoryStackScreenProps<T extends keyof HistoryStackParamList> = MyStackScreenProps<T>;
 
 export type SettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'Settings'>;
+export type ApiKeySettingsScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'ApiKeySettings'>;
 export type PrivacyPolicyScreenProps = NativeStackScreenProps<RootNativeStackParamList, 'PrivacyPolicy'>;
 
 export type RecipeDetailScreenProps = {

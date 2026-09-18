@@ -1,46 +1,40 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isInstalledArtifactPresent } from '../downloads/installed-artifact-presence';
+import { createReconciledInstalledSourceReader } from '../storage/installed-source-presence';
 import type { DatasetPackManifest, InstalledDataset } from '../types';
+import { createDatasetRegistry, DATASET_REGISTRY_KEY } from './dataset-registry-store';
 
-const DATASET_REGISTRY_KEY = 'chi_shen_me.dataset_registry.v1';
+const registry = createDatasetRegistry(AsyncStorage);
+// Records are reconciled against the files on disk, so a record restored from backup without its
+// pack is reported as not installed rather than as a usable recipe source.
+const installed = createReconciledInstalledSourceReader(registry, isInstalledArtifactPresent);
 
-export async function listInstalledDatasets(): Promise<InstalledDataset[]> {
-  const raw = await AsyncStorage.getItem(DATASET_REGISTRY_KEY);
-  if (!raw) {
-    return [];
-  }
+export const readInstalledDatasetRegistry = installed.read;
 
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isInstalledDataset) : [];
-  } catch {
-    return [];
-  }
+export const listInstalledDatasets = installed.list;
+
+/** Installing reads this so a reinstall can carry a restored record's enabled state over. */
+export const listStoredInstalledDatasets = installed.listStored;
+
+export function saveInstalledDataset(dataset: InstalledDataset): Promise<void> {
+  return registry.save(dataset);
 }
 
-export async function saveInstalledDataset(dataset: InstalledDataset): Promise<void> {
-  const datasets = await listInstalledDatasets();
-  const next = datasets.filter((item) => item.id !== dataset.id);
-  next.push(dataset);
-  await saveRegistry(dataset.active ? selectOnlyDataset(next, dataset.id) : next);
+export function removeInstalledDataset(datasetId: string): Promise<void> {
+  return registry.remove(datasetId);
 }
 
-export async function removeInstalledDataset(datasetId: string): Promise<void> {
-  const datasets = await listInstalledDatasets();
-  await saveRegistry(datasets.filter((item) => item.id !== datasetId));
-}
-
+/** Explicit, user-confirmed destructive reset used by local data cleanup. */
 export async function clearInstalledDatasetRegistry(): Promise<void> {
   await AsyncStorage.removeItem(DATASET_REGISTRY_KEY);
 }
 
-export async function setActiveDataset(datasetId: string): Promise<void> {
-  const datasets = await listInstalledDatasets();
-  await saveRegistry(selectOnlyDataset(datasets, datasetId));
+export function setActiveDataset(datasetId: string): Promise<void> {
+  return registry.setActive(datasetId);
 }
 
-export async function clearActiveDataset(datasetId: string): Promise<void> {
-  const datasets = await listInstalledDatasets();
-  await saveRegistry(datasets.map((item) => (item.id === datasetId ? { ...item, active: false } : item)));
+export function clearActiveDataset(datasetId: string): Promise<void> {
+  return registry.clearActive(datasetId);
 }
 
 export function createInstalledDatasetFromManifest(
@@ -68,27 +62,4 @@ export function createInstalledDatasetFromManifest(
     embeddingModel: manifest.embedding.model,
     embeddingDimension: manifest.embedding.dimension,
   };
-}
-
-async function saveRegistry(datasets: InstalledDataset[]) {
-  await AsyncStorage.setItem(DATASET_REGISTRY_KEY, JSON.stringify(datasets));
-}
-
-function selectOnlyDataset(datasets: InstalledDataset[], activeDatasetId: string) {
-  return datasets.map((item) => ({ ...item, active: item.id === activeDatasetId }));
-}
-
-function isInstalledDataset(value: unknown): value is InstalledDataset {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === 'string' &&
-    typeof record.name === 'string' &&
-    typeof record.version === 'string' &&
-    typeof record.localRootUri === 'string' &&
-    typeof record.manifestUri === 'string'
-  );
 }

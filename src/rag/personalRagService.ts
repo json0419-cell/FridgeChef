@@ -1,6 +1,7 @@
 import { getDatabase } from '../db/database';
 import { getUserRecipeWithLibraryById, type UserRecipeWithLibrary } from '../db/userRecipesRepository';
 import { getActiveEmbeddingModel } from './model/modelRegistry';
+import { InstalledSourceRegistryError } from '../storage/installed-source-registry';
 import { NativeModules } from 'react-native';
 import type { InstalledEmbeddingModel, RagRecommendation, UserRecipe, VectorSearchResult } from '../types';
 
@@ -60,7 +61,7 @@ export async function indexPersonalRecipeEmbedding(recipeId: string): Promise<bo
 
   const [recipe, model] = await Promise.all([
     getUserRecipeWithLibraryById(recipeId),
-    getActiveEmbeddingModel(),
+    getActiveEmbeddingModelForIndexing(),
   ]);
 
   if (!recipe || !model) {
@@ -84,7 +85,7 @@ export async function getPersonalRecipeEmbeddingStatuses(
     return statuses;
   }
 
-  const model = await getActiveEmbeddingModel();
+  const model = await getActiveEmbeddingModelForIndexing();
   if (!model) {
     return createDefaultEmbeddingStatuses(recipes, 'unavailable');
   }
@@ -130,7 +131,7 @@ export async function rebuildPersonalRecipeEmbeddings(recipeIds: string[]): Prom
     return result;
   }
 
-  if (!NativeModules.Onnxruntime || !(await getActiveEmbeddingModel())) {
+  if (!NativeModules.Onnxruntime || !(await getActiveEmbeddingModelForIndexing())) {
     result.skipped = uniqueIds.length;
     return result;
   }
@@ -361,4 +362,17 @@ function createDefaultEmbeddingStatuses(
       },
     ]),
   );
+}
+
+// Personal embeddings only read the model registry, so an unreadable registry makes indexing unavailable
+// instead of failing recipe saves; the recovery card on Recommendations reports the registry failure.
+async function getActiveEmbeddingModelForIndexing() {
+  try {
+    return await getActiveEmbeddingModel();
+  } catch (error) {
+    if (error instanceof InstalledSourceRegistryError) {
+      return null;
+    }
+    throw error;
+  }
 }

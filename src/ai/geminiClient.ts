@@ -1,4 +1,5 @@
 import { assertAiDataConsent } from '../privacy/ai-data-consent';
+import { redactCredentials, redactCredentialsFromError } from '../privacy/credential-redaction';
 import { buildGeminiGenerateContentEndpoint, buildGeminiRequestHeaders } from './geminiConfig';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -54,7 +55,48 @@ export async function fetchGeminiGenerateContent(
   if (isAbortError(lastError)) {
     throw new Error('Gemini 请求超时，请检查网络后重试。');
   }
-  throw lastError instanceof Error ? lastError : new Error('Gemini 网络请求失败。');
+
+  // A network-layer failure can echo the request URL or headers, so it never leaves this
+  // boundary in its original form.
+  if (lastError !== null && lastError !== undefined) {
+    throw redactCredentialsFromError(lastError, normalizedKey);
+  }
+  throw new Error('Gemini 网络请求失败。');
+}
+
+/**
+ * Reads a Gemini response body through the one place that redacts it, so nothing parsed out of it
+ * — and no message derived from it — can carry the credential a rejecting provider echoed back.
+ * Callers raise their own error type from `providerErrorMessage`.
+ */
+export async function readGeminiJsonResponse(
+  response: Response,
+  apiKey: string,
+): Promise<{ data: unknown; providerErrorMessage: string | null }> {
+  const text = redactCredentials(await response.text(), apiKey);
+  let data: unknown = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  return { data, providerErrorMessage: response.ok ? null : readProviderErrorMessage(data) };
+}
+
+function readProviderErrorMessage(data: unknown) {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const error = (data as Record<string, unknown>).error;
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const message = (error as Record<string, unknown>).message;
+  return typeof message === 'string' ? message : null;
 }
 
 function isRetryableStatus(status: number) {

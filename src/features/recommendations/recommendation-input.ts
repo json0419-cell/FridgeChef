@@ -1,4 +1,4 @@
-import { listInstalledDatasets } from '../../datasets/datasetRegistry';
+import { readInstalledDatasetRegistry } from '../../datasets/datasetRegistry';
 import { getRecentCookedRecipeIds } from '../../db/cookedHistoryRepository';
 import { listIngredients } from '../../db/ingredientsRepository';
 import { listUserRecipeLibraries } from '../../db/userRecipesRepository';
@@ -7,12 +7,14 @@ import type { AppSettings, Ingredient, InstalledDataset, UserRecipeLibrary } fro
 
 export async function getRecommendationInputSnapshot(language: 'zh' | 'en', extraPreference = '') {
   const settings = await getSettings();
-  const [ingredients, recentCookedRecipeIds, datasets, libraries] = await Promise.all([
+  const [ingredients, recentCookedRecipeIds, datasetRegistry, libraries] = await Promise.all([
     listIngredients(),
     getRecentCookedRecipeIds(settings.recentHistoryDays),
-    listInstalledDatasets(),
+    readInstalledDatasetRegistry(),
     listUserRecipeLibraries(),
   ]);
+  // An unreadable registry keeps ingredients available but must never look like "no packs enabled".
+  const datasets = datasetRegistry.status === 'readable' ? datasetRegistry.records : null;
 
   return {
     settings,
@@ -43,19 +45,22 @@ export function buildRecommendationInputSignature({
   settings: AppSettings;
   ingredients: Ingredient[];
   recentCookedRecipeIds: Set<string>;
-  datasets: InstalledDataset[];
+  datasets: InstalledDataset[] | null;
   libraries: UserRecipeLibrary[];
   extraPreference: string;
 }) {
-  const activeDatasets = datasets
-    .filter((item) => item.active)
-    .map((item) => ({
-      id: item.id,
-      version: item.version,
-      recipeCount: item.recipeCount,
-      chunkCount: item.chunkCount,
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+  const activeDatasets =
+    datasets === null
+      ? 'unreadable'
+      : datasets
+          .filter((item) => item.active)
+          .map((item) => ({
+            id: item.id,
+            version: item.version,
+            recipeCount: item.recipeCount,
+            chunkCount: item.chunkCount,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
 
   return JSON.stringify({
     language,

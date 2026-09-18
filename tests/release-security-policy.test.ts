@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const read = (path: string) => readFileSync(path, 'utf8');
+const sourceFiles = (directory: string): string[] =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name).replaceAll('\\', '/');
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
 
 test('release configuration blocks the overlay permission', () => {
   const appConfig = JSON.parse(read('app.json')) as {
@@ -30,7 +37,7 @@ test('Android follows the system color scheme', () => {
   );
 });
 
-test('Android backup rules exclude SecureStore credentials', () => {
+test('Android backup rules carry the database and settings and nothing else', () => {
   const appConfig = JSON.parse(read('app.json')) as {
     expo?: { plugins?: Array<string | [string, Record<string, unknown>]> };
   };
@@ -40,32 +47,98 @@ test('Android backup rules exclude SecureStore credentials', () => {
   const secureStorePlugin = appConfig.expo?.plugins?.find(
     (plugin): plugin is [string, Record<string, unknown>] => Array.isArray(plugin) && plugin[0] === 'expo-secure-store',
   );
+  // Cloud backup and device transfer are configured separately, so every boundary below is asserted
+  // once for the legacy full-backup rules and twice for the two data-extraction sections.
+  const sections = [
+    ['legacy full backup', legacyRules, 1],
+    ['data extraction', modernRules, 2],
+  ] as const;
 
   assert.equal(secureStorePlugin?.[1].configureAndroidBackup, true);
+  assert.match(mainManifest, /android:allowBackup="true"/);
   assert.match(mainManifest, /android:fullBackupContent="@xml\/secure_store_backup_rules"/);
   assert.match(mainManifest, /android:dataExtractionRules="@xml\/secure_store_data_extraction_rules"/);
-  assert.match(legacyRules, /<include domain="database" path="\."\s*\/>/);
-  assert.equal((modernRules.match(/<include domain="database" path="\."\s*\/>/g) ?? []).length, 2);
-  assert.match(legacyRules, /<exclude domain="sharedpref" path="SecureStore"\s*\/>/);
-  assert.equal((modernRules.match(/<exclude domain="sharedpref" path="SecureStore"\s*\/>/g) ?? []).length, 2);
-  assert.doesNotMatch(legacyRules, /domain="file"/);
-  assert.doesNotMatch(modernRules, /domain="file"/);
+  assert.match(modernRules, /<cloud-backup>/);
+  assert.match(modernRules, /<device-transfer>/);
+
+  for (const [label, rules, sectionCount] of sections) {
+    const occurrences = (pattern: RegExp) => (rules.match(pattern) ?? []).length;
+
+    // Kept: the main database and the non-sensitive settings.
+    assert.equal(occurrences(/<include domain="database" path="\."\s*\/>/g), sectionCount, `${label} must back up the database`);
+    assert.equal(occurrences(/<include domain="sharedpref" path="\."\s*\/>/g), sectionCount, `${label} must back up settings`);
+    // Dropped: the secure credentials.
+    assert.equal(
+      occurrences(/<exclude domain="sharedpref" path="SecureStore"\s*\/>/g),
+      sectionCount,
+      `${label} must exclude secure credentials`,
+    );
+    // Dropped: models, DatasetPacks, and the staging directories downloads park beside them, which
+    // all live in the app's files directory, plus caches and anything on external storage. These
+    // rules are an allowlist, so naming no other domain is what excludes them.
+    for (const domain of ['file', 'cache', 'external', 'sharedpref_external', 'root', 'device_root']) {
+      assert.doesNotMatch(rules, new RegExp(`domain="${domain}"`), `${label} must not reach the ${domain} domain`);
+    }
+  }
 });
 
-test('the API key settings screen blocks capture without media permissions', () => {
+test('backed-up storage holds the database while excluded storage holds models and packs', () => {
+  // The rules above are only a real boundary if the app keeps each kind of data where it says.
+  assert.match(read('src/db/database.ts'), /openDatabaseAsync\(DATABASE_NAME\)/);
+  // Packs and models are written under the files directory, which no backup rule includes.
+  assert.match(read('src/datasets/datasetPack.ts'), /new Directory\(Paths\.document, 'datasets'\)/);
+  assert.match(read('src/rag/model/modelPack.ts'), /new Directory\(Paths\.document, 'models'\)/);
+  // The key and the record that says it passed a live test are both secure-storage only, so a
+  // restore that leaves the secure store empty cannot bring verification state back on its own.
+  const credentials = read('src/storage/api-key-storage.ts');
+  assert.match(credentials, /secureStore\.getItem\(credentialVerificationStorageKey\(provider\)\)/);
+  for (const [call] of credentials.matchAll(/ordinaryStore\.\w+\([^)]*\)/g)) {
+    assert.equal(
+      call.includes('credentialVerificationStorageKey') || call.includes('credentialStorageKey'),
+      false,
+      'credential keys must never be read from or written to ordinary storage',
+    );
+  }
+});
+
+test('capture protection is limited to the API key surface without media or screenshot permissions', () => {
   const appConfig = JSON.parse(read('app.json')) as {
-    expo?: { android?: { blockedPermissions?: string[] } };
+    expo?: { android?: { blockedPermissions?: string[]; permissions?: string[] } };
   };
-  const settingsScreen = read('src/features/settings/screens/SettingsScreen.tsx');
+  const mainManifest = read('android/app/src/main/AndroidManifest.xml');
   const packageJson = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+  const protection = read('src/privacy/credential-capture-protection.ts');
+  const sources = sourceFiles('src');
 
   assert.equal(packageJson.dependencies?.['expo-screen-capture'], '~57.0.2');
-  assert.match(settingsScreen, /preventScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
-  assert.match(settingsScreen, /allowScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
-  assert.equal(
-    appConfig.expo?.android?.blockedPermissions?.includes('android.permission.READ_MEDIA_IMAGES'),
-    true,
+  assert.match(protection, /preventScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.match(protection, /allowScreenCaptureAsync\(CREDENTIAL_SCREEN_CAPTURE_KEY\)/);
+  assert.doesNotMatch(protection, /ScreenshotListener|requestPermissionsAsync/);
+  assert.deepEqual(
+    sources.filter((file) => read(file).includes('expo-screen-capture')),
+    ['src/privacy/credential-capture-protection.ts'],
   );
+  // Match any call spelling, indented or not, so a stray protected screen cannot slip past.
+  assert.deepEqual(
+    sources.filter(
+      (file) =>
+        file !== 'src/privacy/credential-capture-protection.ts' &&
+        /useCredentialCaptureProtection\b/.test(read(file)),
+    ),
+    ['src/features/settings/screens/api-key-settings-screen.tsx'],
+  );
+
+  for (const permission of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'DETECT_SCREEN_CAPTURE']) {
+    assert.equal(
+      appConfig.expo?.android?.blockedPermissions?.includes(`android.permission.${permission}`),
+      true,
+      `${permission} must be blocked so a dependency cannot merge it into the manifest`,
+    );
+  }
+  for (const permission of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'DETECT_SCREEN_CAPTURE']) {
+    assert.equal(appConfig.expo?.android?.permissions?.includes(`android.permission.${permission}`) ?? false, false);
+  }
+  assert.doesNotMatch(mainManifest, /android\.permission\.DETECT_SCREEN_CAPTURE/);
 });
 
 test('all Gemini feature modules use the unified network client', () => {
@@ -106,7 +179,7 @@ test('model installation commits only after verified downloads complete', () => 
   const source = read('src/rag/model/modelPack.ts');
   const verify = source.indexOf('await downloadAndVerifyModelFile(');
   const writeManifest = source.indexOf("writeTextFile(new File(stagingDirectory, 'model-pack.json')");
-  const promote = source.indexOf('stagingDirectory.move(installedDirectory)');
+  const promote = source.indexOf('stagingDirectory.moveSync(installedDirectory)');
   const runtimeTest = source.indexOf('await verifyEmbeddingModelRuntime(installedCandidate)');
   const register = source.indexOf('await saveInstalledEmbeddingModel(installed)');
 
@@ -115,6 +188,32 @@ test('model installation commits only after verified downloads complete', () => 
   assert.ok(promote > writeManifest, 'staging must be promoted after manifest is written');
   assert.ok(runtimeTest > promote, 'runtime test must run after the verified directory is promoted');
   assert.ok(register > runtimeTest, 'registry must be updated after the runtime test passes');
+});
+
+test('pack installs and removals read the installed-source registry before touching files', () => {
+  const dataset = read('src/datasets/datasetPack.ts');
+  const datasetRead = dataset.indexOf('await listStoredInstalledDatasets()');
+  assert.ok(datasetRead >= 0);
+  assert.ok(datasetRead < dataset.indexOf('ensureDirectory(root)'), 'dataset install must refuse before creating directories');
+
+  // Removal drops the registry record first: an unreadable or unwritable registry then deletes
+  // nothing, and a failed deletion can only orphan files (ADR 0008).
+  const uninstall = dataset.slice(dataset.indexOf('export async function uninstallDataset'));
+  const removeRecord = uninstall.indexOf('removeRecord:');
+  const deleteFiles = uninstall.indexOf('deleteArtifactFiles:');
+  assert.ok(removeRecord >= 0, 'dataset removal must go through removeInstalledArtifact');
+  assert.ok(deleteFiles > removeRecord, 'dataset removal must drop the registry record before deleting files');
+
+  const removal = read('src/downloads/installed-artifact-removal.ts');
+  assert.ok(
+    removal.indexOf('await removeRecord()') < removal.indexOf('deleteArtifactFiles()'),
+    'installed-artifact removal must await the record removal before deleting files',
+  );
+
+  const model = read('src/rag/model/modelPack.ts');
+  const modelRead = model.indexOf('await listStoredInstalledEmbeddingModels()');
+  assert.ok(modelRead >= 0);
+  assert.ok(modelRead < model.indexOf('ensureDirectory(root)'), 'model install must refuse before creating directories');
 });
 
 test('privacy policy and in-app disclosure remain present', () => {

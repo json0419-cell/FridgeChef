@@ -11,6 +11,7 @@ import {
   formatDatabaseStartupDiagnostic,
 } from '../src/db/database-diagnostics.ts';
 import { SqliteTestDatabase, USER_DATA_TABLES, type FailureInjector } from './support/sqlite-test-database.ts';
+import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
 
 const baseRecipes: BaseRecipe[] = [
   {
@@ -265,7 +266,7 @@ test('initialization resolves only after migration and seeding are committed', a
 });
 
 test('startup diagnostics expose only recovery metadata', () => {
-  const secret = 'AIza-secret-key-that-must-never-appear';
+  const secret = SENTINEL_API_KEY;
   const error = new DatabaseMigrationError(
     'DATABASE_SEEDING_FAILED',
     `Failed near ingredient data and ${secret}`,
@@ -313,6 +314,36 @@ test('copyable diagnostic text contains only the code, timestamp, and schema ver
       'Target database version: 2',
     ].join('\n'),
   );
+});
+
+// The release-validation fixture (#27) refuses the upgrade by marking the schema newer than this
+// build supports, so it is only correct if startup hands it the version the database actually had,
+// before any migration has run. Builds that select no fixture pass nothing and startup is unchanged.
+test('the release-validation fixture runs before any migration, on the version the database had', async (context) => {
+  const database = openFixture(1);
+  context.after(() => database.close());
+  const observed: number[] = [];
+
+  await createDatabaseStartup({
+    openDatabase: async () => database,
+    baseRecipes,
+    applyUpgradeFixture: async (db) => {
+      observed.push(db.version());
+    },
+  }).initializeDatabase();
+
+  assert.deepEqual(observed, [1]);
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+});
+
+test('startup without a selected fixture still migrates and seeds', async (context) => {
+  const database = openFixture(1);
+  context.after(() => database.close());
+
+  await startupFor(database).initializeDatabase();
+
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+  assert.deepEqual(database.rows('recipes'), seededRecipeRows);
 });
 
 function withoutRecipes(snapshot: ReturnType<SqliteTestDatabase['snapshot']>) {

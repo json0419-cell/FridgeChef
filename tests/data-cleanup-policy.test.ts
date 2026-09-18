@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DATA_CLEANUP_CATEGORIES,
+  DATA_CLEANUP_STEPS,
+  DATA_CLEANUP_STEP_TITLE_KEYS,
   DataCleanupAggregateError,
   createDataCleanupRunner,
   type DataCleanupOperations,
   type DataCleanupStep,
 } from '../src/storage/data-cleanup-policy.ts';
+import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
 
 test('each named cleanup action affects only its own data category', async () => {
   for (const category of DATA_CLEANUP_CATEGORIES) {
@@ -38,7 +41,7 @@ test('clearing all continues after a failed category and reports only category n
   };
   operations.apiKey = async () => {
     calls.push('apiKey');
-    throw new Error('AIza-secret-that-must-not-appear');
+    throw new Error(SENTINEL_API_KEY);
   };
   const runCleanup = createDataCleanupRunner(operations);
 
@@ -49,12 +52,37 @@ test('clearing all continues after a failed category and reports only category n
       const aggregate = error as DataCleanupAggregateError;
       assert.deepEqual(aggregate.failedSteps, ['downloadedPacks', 'apiKey']);
       assert.equal(aggregate.message.includes(secret), false);
+      assert.equal(aggregate.message.includes(SENTINEL_API_KEY), false);
       assert.equal(aggregate.message.includes('AIza'), false);
       return true;
     },
   );
 
   assert.deepEqual(calls, [...DATA_CLEANUP_CATEGORIES, 'preferences']);
+});
+
+test('a failed named action leaves every other data category untouched', async () => {
+  for (const category of DATA_CLEANUP_CATEGORIES) {
+    const calls: DataCleanupStep[] = [];
+    const operations = createOperations(calls);
+    operations[category] = async () => {
+      calls.push(category);
+      throw new Error('Injected category failure');
+    };
+    const runCleanup = createDataCleanupRunner(operations);
+
+    await assert.rejects(() => runCleanup(category), /Injected category failure/);
+
+    assert.deepEqual(calls, [category]);
+  }
+});
+
+test('every cleanup step has a safe category title to report a partial failure with', () => {
+  assert.deepEqual(DATA_CLEANUP_STEPS, [...DATA_CLEANUP_CATEGORIES, 'preferences']);
+
+  for (const step of DATA_CLEANUP_STEPS) {
+    assert.equal(DATA_CLEANUP_STEP_TITLE_KEYS[step], `dataManagement.${step}Title`);
+  }
 });
 
 function createOperations(calls: DataCleanupStep[]): DataCleanupOperations {

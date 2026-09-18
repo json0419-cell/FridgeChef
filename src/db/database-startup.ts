@@ -15,6 +15,12 @@ export interface StartupDatabase extends MigrationDatabase {
 type DatabaseStartupOptions<Database extends StartupDatabase> = {
   openDatabase: () => Promise<Database>;
   baseRecipes: readonly BaseRecipe[];
+  /**
+   * Release-validation hook (#27). It runs after the schema version is read and before any
+   * migration, which is the only point where a fixture can refuse the upgrade without hiding the
+   * version the database actually had. Builds that select no fixture pass a no-op.
+   */
+  applyUpgradeFixture?: (database: Database) => Promise<void>;
 };
 
 /**
@@ -24,6 +30,7 @@ type DatabaseStartupOptions<Database extends StartupDatabase> = {
 export function createDatabaseStartup<Database extends StartupDatabase>({
   openDatabase,
   baseRecipes,
+  applyUpgradeFixture,
 }: DatabaseStartupOptions<Database>) {
   let databasePromise: Promise<Database> | null = null;
 
@@ -41,6 +48,7 @@ export function createDatabaseStartup<Database extends StartupDatabase>({
   async function initializeDatabase() {
     const database = await getDatabase();
     const originalVersion = await readSchemaVersion(database);
+    await applyUpgradeFixture?.(database);
     const version = await migrateDatabase(database);
 
     try {

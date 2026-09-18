@@ -206,7 +206,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
                 />
               </View>
               {!apiKeyReady ? (
-                <TouchableOpacity accessibilityRole="link" onPress={() => navigation.navigate('Settings')} style={styles.setupRow}>
+                <TouchableOpacity accessibilityRole="link" onPress={() => navigation.navigate('ApiKeySettings')} style={styles.setupRow}>
                   <Text style={styles.setupRowText}>{scanSetupText(language)}</Text>
                   <ChevronRight size={14} color="#6B6B6B" />
                 </TouchableOpacity>

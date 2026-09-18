@@ -1,5 +1,5 @@
 import { extractGeminiText, extractJsonObject } from './json';
-import { fetchGeminiGenerateContent } from './geminiClient';
+import { fetchGeminiGenerateContent, readGeminiJsonResponse } from './geminiClient';
 import { buildRecommendationRefinerPrompt } from './recommendationRefinerPrompt';
 import type { AppSettings, Ingredient, RagRecommendation, RefinedRagRecommendation } from '../types';
 
@@ -68,7 +68,7 @@ async function refineWithGemini(
     { maxAttempts: 1 },
   );
 
-  const data = await readJsonResponse(response, 'Gemini 推荐整理失败');
+  const data = await readJsonResponse(response, 'Gemini 推荐整理失败', apiKey);
   try {
     return parseRefinedRecommendationsJson(extractGeminiText(data), sourceRecommendations);
   } catch (error) {
@@ -191,15 +191,8 @@ function recommendationKey(recipeId: string | undefined, chunkId: string | undef
   return `${recipeId ?? ''}::${chunkId ?? ''}::${id}`;
 }
 
-async function readJsonResponse(response: Response, fallbackMessage: string) {
-  const text = await response.text();
-  let data: unknown = null;
-
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
+async function readJsonResponse(response: Response, fallbackMessage: string, apiKey: string) {
+  const { data, providerErrorMessage } = await readGeminiJsonResponse(response, apiKey);
 
   if (!response.ok) {
     const code: RecommendationRefinerFailureCode = response.status === 401 || response.status === 403
@@ -207,25 +200,10 @@ async function readJsonResponse(response: Response, fallbackMessage: string) {
       : response.status === 429
         ? 'quota'
         : 'provider';
-    throw new RecommendationRefinerError(code, readProviderError(data) || `${fallbackMessage} (${response.status})`);
+    throw new RecommendationRefinerError(code, providerErrorMessage || `${fallbackMessage} (${response.status})`);
   }
 
   return data;
-}
-
-function readProviderError(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-
-  const root = data as Record<string, unknown>;
-  const error = root.error;
-  if (!error || typeof error !== 'object') {
-    return null;
-  }
-
-  const message = (error as Record<string, unknown>).message;
-  return typeof message === 'string' ? message : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
