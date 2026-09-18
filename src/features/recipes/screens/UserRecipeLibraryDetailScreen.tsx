@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import {
   deleteUserRecipe,
   deleteUserRecipes,
@@ -25,6 +26,12 @@ import type { RecipesStackScreenProps, UserRecipe, UserRecipeDifficulty, UserRec
 
 type Props = RecipesStackScreenProps<'UserRecipeLibraryDetail'>;
 type SourceFilter = 'all' | UserRecipeSourceType;
+
+type ConfirmDialogState = {
+  title: string;
+  message: string;
+  onConfirm: () => void | Promise<void>;
+} | null;
 type DifficultyFilter = 'all' | UserRecipeDifficulty;
 type TFunction = ReturnType<typeof useI18n>['t'];
 type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
@@ -58,6 +65,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,7 +106,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
 
     const nextName = renameValue.trim();
     if (!nextName) {
-      Alert.alert(t('libraryDetail.nameRequired'));
+      showFeedback({ tone: 'error', title: t('libraryDetail.nameRequired') });
       return;
     }
 
@@ -106,9 +114,9 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
     try {
       await updateUserRecipeLibraryName(library.id, nextName);
       await load();
-      Alert.alert(t('libraryDetail.nameUpdated'));
+      showFeedback({ tone: 'success', title: t('libraryDetail.nameUpdated') });
     } catch (error) {
-      Alert.alert(t('libraryDetail.renameFailed'), formatError(error, t));
+      showFeedback({ tone: 'error', title: t('libraryDetail.renameFailed'), message: formatError(error, t) });
     } finally {
       setRenaming(false);
     }
@@ -119,31 +127,25 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
       return;
     }
 
-    Alert.alert(t('libraryDetail.deleteLibraryTitle'), t('libraryDetail.deleteLibraryBody', { name: library.name, count: library.recipeCount }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          await deleteUserRecipeLibrary(library.id);
-          navigation.goBack();
-        },
+    setConfirmDialog({
+      title: t('libraryDetail.deleteLibraryTitle'),
+      message: t('libraryDetail.deleteLibraryBody', { name: library.name, count: library.recipeCount }),
+      onConfirm: async () => {
+        await deleteUserRecipeLibrary(library.id);
+        navigation.goBack();
       },
-    ]);
+    });
   };
 
   const confirmDeleteRecipe = (recipe: UserRecipe) => {
-    Alert.alert(t('libraryDetail.deleteRecipeTitle'), t('libraryDetail.deleteRecipeBody', { title: recipe.title }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          await deleteUserRecipe(recipe.id);
-          await load();
-        },
+    setConfirmDialog({
+      title: t('libraryDetail.deleteRecipeTitle'),
+      message: t('libraryDetail.deleteRecipeBody', { title: recipe.title }),
+      onConfirm: async () => {
+        await deleteUserRecipe(recipe.id);
+        await load();
       },
-    ]);
+    });
   };
 
   const toggleRecipeSelection = useCallback((recipeId: string) => {
@@ -227,26 +229,23 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
       return;
     }
 
-    Alert.alert(t('libraryDetail.bulkDeleteTitle'), t('libraryDetail.bulkDeleteBody', { count: selectedCount }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          setBulkBusy(true);
-          try {
-            await deleteUserRecipes(selectedRecipeIdsArray);
-            setSelectedRecipeIds(new Set());
-            await load();
-            showFeedback({ tone: 'success', title: t('libraryDetail.bulkDeletedTitle'), message: t('libraryDetail.bulkChangedBody', { count: selectedCount }) });
-          } catch (error) {
-            showFeedback({ tone: 'error', title: t('libraryDetail.bulkFailed'), message: formatError(error, t) });
-          } finally {
-            setBulkBusy(false);
-          }
-        },
+    setConfirmDialog({
+      title: t('libraryDetail.bulkDeleteTitle'),
+      message: t('libraryDetail.bulkDeleteBody', { count: selectedCount }),
+      onConfirm: async () => {
+        setBulkBusy(true);
+        try {
+          await deleteUserRecipes(selectedRecipeIdsArray);
+          setSelectedRecipeIds(new Set());
+          await load();
+          showFeedback({ tone: 'success', title: t('libraryDetail.bulkDeletedTitle'), message: t('libraryDetail.bulkChangedBody', { count: selectedCount }) });
+        } catch (error) {
+          showFeedback({ tone: 'error', title: t('libraryDetail.bulkFailed'), message: formatError(error, t) });
+        } finally {
+          setBulkBusy(false);
+        }
       },
-    ]);
+    });
   };
 
   const rebuildEmbeddings = async (scope: 'selected' | 'all') => {
@@ -428,6 +427,21 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
             </View>
           </AppCard>
         )}
+      />
+      <AppConfirmModal
+        visible={confirmDialog !== null}
+        title={confirmDialog?.title ?? ''}
+        message={confirmDialog?.message ?? ''}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.delete')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          void action?.();
+        }}
       />
     </SafeAreaView>
   );

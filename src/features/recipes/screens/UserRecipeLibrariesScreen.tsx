@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppCard, AppTextInput, SectionHeader } from '../../../shared/components/AppLayout';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import {
   createUserRecipeLibrary,
   deleteUserRecipeLibrary,
@@ -19,11 +21,13 @@ type ActionButtonVariant = 'primary' | 'secondary' | 'destructive';
 
 export function UserRecipeLibrariesScreen({ navigation }: Props) {
   const { t } = useI18n();
+  const { showFeedback } = useFeedback();
   const [libraries, setLibraries] = useState<UserRecipeLibrary[]>([]);
   const [recipeCount, setRecipeCount] = useState(0);
   const [newLibraryName, setNewLibraryName] = useState('');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<UserRecipeLibrary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,7 +49,7 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
   const createLibrary = async () => {
     const name = newLibraryName.trim();
     if (!name) {
-      Alert.alert(t('userLibraries.nameRequired'));
+      showFeedback({ tone: 'error', title: t('userLibraries.nameRequired') });
       return;
     }
 
@@ -55,7 +59,7 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
       setNewLibraryName('');
       await load();
     } catch (error) {
-      Alert.alert(t('userLibraries.createFailed'), formatError(error, t));
+      showFeedback({ tone: 'error', title: t('userLibraries.createFailed'), message: formatError(error, t) });
     } finally {
       setCreating(false);
     }
@@ -67,17 +71,18 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
   };
 
   const confirmDeleteLibrary = (library: UserRecipeLibrary) => {
-    Alert.alert(t('userLibraries.deleteTitle'), t('userLibraries.deleteBody', { name: library.name, count: library.recipeCount }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          await deleteUserRecipeLibrary(library.id);
-          await load();
-        },
-      },
-    ]);
+    setPendingDeletion(library);
+  };
+
+  const runDeleteLibrary = async () => {
+    const library = pendingDeletion;
+    setPendingDeletion(null);
+    if (!library) {
+      return;
+    }
+
+    await deleteUserRecipeLibrary(library.id);
+    await load();
   };
 
   return (
@@ -154,6 +159,20 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
             </View>
           </AppCard>
         )}
+      />
+      <AppConfirmModal
+        visible={pendingDeletion !== null}
+        title={t('userLibraries.deleteTitle')}
+        message={t('userLibraries.deleteBody', {
+          name: pendingDeletion?.name ?? '',
+          count: pendingDeletion?.recipeCount ?? 0,
+        })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.delete')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={() => void runDeleteLibrary()}
       />
     </SafeAreaView>
   );

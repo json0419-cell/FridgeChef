@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronRight } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppTextInput } from '../../../shared/components/AppLayout';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { recognizeFoodWithProvider } from '../../../ai/providerAdapter';
 import { addIngredient, getIngredientById, updateIngredient } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
@@ -18,6 +19,7 @@ type ActionButtonVariant = 'primary' | 'secondary';
 
 export function AddIngredientScreen({ navigation, route }: Props) {
   const { language, t } = useI18n();
+  const { showFeedback } = useFeedback();
   const ingredientId = route.params?.ingredientId;
   const mode = route.params?.mode;
   const [existing, setExisting] = useState<Ingredient | null>(null);
@@ -77,7 +79,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
   const takePhoto = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(t('addIngredient.permissionCameraTitle'), t('addIngredient.permissionCameraBody'));
+      showFeedback({ tone: 'info', title: t('addIngredient.permissionCameraTitle'), message: t('addIngredient.permissionCameraBody') });
       return;
     }
 
@@ -97,7 +99,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
 
     const asset = result.assets[0];
     if (!asset?.base64) {
-      Alert.alert(t('addIngredient.imageReadFailedTitle'), t('addIngredient.imageReadFailedBody'));
+      showFeedback({ tone: 'error', title: t('addIngredient.imageReadFailedTitle'), message: t('addIngredient.imageReadFailedBody') });
       return;
     }
 
@@ -109,7 +111,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
     const apiKey = await getApiKey('gemini');
 
     if (!apiKey) {
-      Alert.alert(t('addIngredient.missingKeyTitle'), t('addIngredient.missingKeyBody'));
+      showFeedback({ tone: 'info', title: t('addIngredient.missingKeyTitle'), message: t('addIngredient.missingKeyBody') });
       return;
     }
 
@@ -129,7 +131,11 @@ export function AddIngredientScreen({ navigation, route }: Props) {
 
       navigation.navigate('ConfirmRecognizedFood', { items: result.items });
     } catch (error) {
-      Alert.alert(t('addIngredient.recognitionFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      showFeedback({
+        tone: 'error',
+        title: t('addIngredient.recognitionFailed'),
+        message: error instanceof Error ? error.message : t('common.unknown'),
+      });
     } finally {
       setRecognizing(false);
     }
@@ -138,13 +144,13 @@ export function AddIngredientScreen({ navigation, route }: Props) {
   const save = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      Alert.alert(t('addIngredient.nameRequired'));
+      showFeedback({ tone: 'error', title: t('addIngredient.nameRequired') });
       return;
     }
 
     const parsedQuantity = parseIngredientQuantity(quantity);
     if (parsedQuantity === null) {
-      Alert.alert(t('addIngredient.quantityInvalid'));
+      showFeedback({ tone: 'error', title: t('addIngredient.quantityInvalid') });
       return;
     }
 
@@ -171,7 +177,11 @@ export function AddIngredientScreen({ navigation, route }: Props) {
         navigation.navigate('Fridge');
       }
     } catch (error) {
-      Alert.alert(t('addIngredient.saveFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      showFeedback({
+        tone: 'error',
+        title: t('addIngredient.saveFailed'),
+        message: error instanceof Error ? error.message : t('common.unknown'),
+      });
     } finally {
       setSaving(false);
     }

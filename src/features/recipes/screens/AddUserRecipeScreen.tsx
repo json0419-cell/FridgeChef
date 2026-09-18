@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { generateRecipeFromYouTubeWithGemini } from '../../../ai/geminiAdapter';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../shared/components/AppLayout';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import {
   addUserRecipe,
   ensureDefaultUserRecipeLibrary,
@@ -24,6 +26,13 @@ import type {
   UserRecipeSourceType,
 } from '../../../types';
 
+type ConfirmDialogState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void | Promise<void>;
+} | null;
+
 type Props = RecipesStackScreenProps<'AddUserRecipe'>;
 type TFunction = ReturnType<typeof useI18n>['t'];
 type ActionButtonVariant = 'primary' | 'secondary';
@@ -32,6 +41,7 @@ const DIFFICULTIES: UserRecipeDifficulty[] = ['简单', '中等', '偏难', '未
 
 export function AddUserRecipeScreen({ navigation, route }: Props) {
   const { language, t } = useI18n();
+  const { showFeedback } = useFeedback();
   const recipeId = route.params?.recipeId;
   const initialLibraryId = route.params?.libraryId;
   const [existing, setExisting] = useState<UserRecipe | null>(null);
@@ -52,6 +62,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
   const [checkingYoutubeDuplicate, setCheckingYoutubeDuplicate] = useState(false);
   const [generatingFromYoutube, setGeneratingFromYoutube] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +103,9 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
       }
     }
 
-    void load().catch((error) => Alert.alert(t('addRecipe.loadFailed'), formatError(error, t)));
+    void load().catch((error) =>
+      showFeedback({ tone: 'error', title: t('addRecipe.loadFailed'), message: formatError(error, t) }),
+    );
     return () => {
       cancelled = true;
     };
@@ -115,22 +128,22 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
     };
 
     if (!draft.libraryId) {
-      Alert.alert(t('addRecipe.selectLibrary'));
+      showFeedback({ tone: 'error', title: t('addRecipe.selectLibrary') });
       return;
     }
 
     if (!draft.title) {
-      Alert.alert(t('addRecipe.titleRequired'));
+      showFeedback({ tone: 'error', title: t('addRecipe.titleRequired') });
       return;
     }
 
     if (draft.mainIngredients.length === 0) {
-      Alert.alert(t('addRecipe.mainRequired'));
+      showFeedback({ tone: 'error', title: t('addRecipe.mainRequired') });
       return;
     }
 
     if (draft.steps.length === 0) {
-      Alert.alert(t('addRecipe.stepsRequired'));
+      showFeedback({ tone: 'error', title: t('addRecipe.stepsRequired') });
       return;
     }
 
@@ -138,7 +151,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
     try {
       const duplicate = await findDuplicateYoutubeRecipe(draft.libraryId, draft.sourceUrl, existing?.id);
       if (duplicate) {
-        Alert.alert(t('addRecipe.duplicateTitle'), t('addRecipe.duplicateBody', { title: duplicate.title }));
+        showFeedback({ tone: 'error', title: t('addRecipe.duplicateTitle'), message: t('addRecipe.duplicateBody', { title: duplicate.title }) });
         return;
       }
 
@@ -151,7 +164,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
       }
       navigation.goBack();
     } catch (error) {
-      Alert.alert(t('addRecipe.saveFailed'), formatError(error, t));
+      showFeedback({ tone: 'error', title: t('addRecipe.saveFailed'), message: formatError(error, t) });
     } finally {
       setSaving(false);
     }
@@ -162,26 +175,28 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
     const selectedLibraryId = libraryId.trim();
 
     if (!isYoutubeUrl(url)) {
-      Alert.alert(t('addRecipe.invalidYoutubeTitle'), t('addRecipe.invalidYoutubeBody'));
+      showFeedback({ tone: 'error', title: t('addRecipe.invalidYoutubeTitle'), message: t('addRecipe.invalidYoutubeBody') });
       return;
     }
 
     if (!selectedLibraryId) {
-      Alert.alert(t('addRecipe.selectLibrary'));
+      showFeedback({ tone: 'error', title: t('addRecipe.selectLibrary') });
       return;
     }
 
     const duplicate = await checkYoutubeDuplicateForUrl(url, selectedLibraryId, true);
     if (duplicate) {
-      Alert.alert(t('addRecipe.duplicateTitle'), t('addRecipe.duplicateBody', { title: duplicate.title }));
+      showFeedback({ tone: 'error', title: t('addRecipe.duplicateTitle'), message: t('addRecipe.duplicateBody', { title: duplicate.title }) });
       return;
     }
 
     if (hasDraftContent({ title, description, mainIngredients, seasonings, steps, tags })) {
-      Alert.alert(t('addRecipe.overwriteTitle'), t('addRecipe.overwriteBody'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('addRecipe.overwriteAction'), onPress: () => void runYoutubeGeneration(url) },
-      ]);
+      setConfirmDialog({
+        title: t('addRecipe.overwriteTitle'),
+        message: t('addRecipe.overwriteBody'),
+        confirmLabel: t('addRecipe.overwriteAction'),
+        onConfirm: () => void runYoutubeGeneration(url),
+      });
       return;
     }
 
@@ -205,7 +220,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
     const apiKey = await getApiKey('gemini');
 
     if (!apiKey) {
-      Alert.alert(t('addRecipe.missingKeyTitle'), t('addRecipe.missingKeyBody'));
+      showFeedback({ tone: 'info', title: t('addRecipe.missingKeyTitle'), message: t('addRecipe.missingKeyBody') });
       return;
     }
 
@@ -227,9 +242,9 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
       setSourceType('youtube');
       setSourceUrl(generated.sourceUrl);
       setYoutubeUrl(generated.sourceUrl);
-      Alert.alert(t('addRecipe.generatedTitle'), t('addRecipe.generatedBody'));
+      showFeedback({ tone: 'success', title: t('addRecipe.generatedTitle'), message: t('addRecipe.generatedBody') });
     } catch (error) {
-      Alert.alert(t('addRecipe.youtubeFailed'), formatError(error, t));
+      showFeedback({ tone: 'error', title: t('addRecipe.youtubeFailed'), message: formatError(error, t) });
     } finally {
       setGeneratingFromYoutube(false);
     }
@@ -376,6 +391,21 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppConfirmModal
+        visible={confirmDialog !== null}
+        title={confirmDialog?.title ?? ''}
+        message={confirmDialog?.message ?? ''}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={confirmDialog?.confirmLabel ?? t('common.ok')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          void action?.();
+        }}
+      />
     </SafeAreaView>
   );
 }

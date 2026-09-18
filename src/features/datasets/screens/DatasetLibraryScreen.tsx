@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { RefreshCw, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppTextInput } from '../../../shared/components/AppLayout';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { InstalledSourceRecoveryCard } from '../../../shared/components/InstalledSourceRecoveryCard';
 import {
   fetchDatasetIndex,
@@ -28,6 +30,7 @@ type ActionButtonVariant = 'primary' | 'secondary';
 
 export function DatasetLibraryScreen({ navigation }: Props) {
   const { language, t } = useI18n();
+  const { showFeedback } = useFeedback();
   const [datasets, setDatasets] = useState<InstalledDataset[]>([]);
   const [officialDatasets, setOfficialDatasets] = useState<DatasetIndexEntry[]>([]);
   const [userLibraryCount, setUserLibraryCount] = useState(0);
@@ -41,6 +44,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
   const [progress, setProgress] = useState<DatasetDownloadProgress | null>(null);
   const [registryDiagnostic, setRegistryDiagnostic] = useState<InstalledSourceDiagnostic | null>(null);
   const [registryLoading, setRegistryLoading] = useState(true);
+  const [pendingDeletion, setPendingDeletion] = useState<InstalledDataset | null>(null);
   // Every registry mutation stays unavailable until the registry has been read successfully.
   const registryLocked = registryLoading || registryDiagnostic !== null;
 
@@ -119,7 +123,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
     }
     const url = manifestUrl.trim();
     if (!url) {
-      Alert.alert(t('dataset.missingUrl'));
+      showFeedback({ tone: 'error', title: t('dataset.missingUrl') });
       return;
     }
 
@@ -129,10 +133,13 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       await downloadDatasetPack(url, setProgress);
       setManifestUrl('');
       await loadDatasets();
-      Alert.alert(t('dataset.installedTitle'), t('dataset.installedBody'));
     } catch (error) {
       if (!handleRegistryError(error)) {
-        Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+        showFeedback({
+          tone: 'error',
+          title: t('dataset.installFailed'),
+          message: error instanceof Error ? error.message : t('common.unknown'),
+        });
       }
     } finally {
       setManualDownloading(false);
@@ -150,10 +157,13 @@ export function DatasetLibraryScreen({ navigation }: Props) {
     try {
       await downloadDatasetPack(url, setProgress);
       await loadDatasets();
-      Alert.alert(t('dataset.installedTitle'), `${dataset.name}\n${t('dataset.installedBody')}`);
     } catch (error) {
       if (!handleRegistryError(error)) {
-        Alert.alert(t('dataset.installFailed'), error instanceof Error ? error.message : t('common.unknown'));
+        showFeedback({
+          tone: 'error',
+          title: t('dataset.installFailed'),
+          message: error instanceof Error ? error.message : t('common.unknown'),
+        });
       }
     } finally {
       setDownloadingDatasetId(null);
@@ -173,7 +183,11 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       }
     } catch (error) {
       if (!handleRegistryError(error)) {
-        Alert.alert(t('dataset.toggleFailed'), error instanceof Error ? error.message : t('common.unknown'));
+        showFeedback({
+          tone: 'error',
+          title: t('dataset.toggleFailed'),
+          message: error instanceof Error ? error.message : t('common.unknown'),
+        });
       }
       return;
     }
@@ -184,23 +198,28 @@ export function DatasetLibraryScreen({ navigation }: Props) {
     if (registryLocked) {
       return;
     }
-    Alert.alert(t('dataset.deleteTitle'), t('dataset.deleteBody', { name: dataset.name }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await uninstallDataset(dataset);
-            await loadDatasets();
-          } catch (error) {
-            if (!handleRegistryError(error)) {
-              Alert.alert(t('dataset.deleteFailed'), error instanceof Error ? error.message : t('common.unknown'));
-            }
-          }
-        },
-      },
-    ]);
+    setPendingDeletion(dataset);
+  };
+
+  const confirmRemove = async () => {
+    const dataset = pendingDeletion;
+    setPendingDeletion(null);
+    if (!dataset) {
+      return;
+    }
+
+    try {
+      await uninstallDataset(dataset);
+      await loadDatasets();
+    } catch (error) {
+      if (!handleRegistryError(error)) {
+        showFeedback({
+          tone: 'error',
+          title: t('dataset.deleteFailed'),
+          message: error instanceof Error ? error.message : t('common.unknown'),
+        });
+      }
+    }
   };
 
   return (
@@ -311,6 +330,17 @@ export function DatasetLibraryScreen({ navigation }: Props) {
           </View>
         ) : null}
       </ScrollView>
+      <AppConfirmModal
+        visible={pendingDeletion !== null}
+        title={t('dataset.deleteTitle')}
+        message={t('dataset.deleteBody', { name: pendingDeletion?.name ?? '' })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.delete')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={() => void confirmRemove()}
+      />
     </SafeAreaView>
   );
 }

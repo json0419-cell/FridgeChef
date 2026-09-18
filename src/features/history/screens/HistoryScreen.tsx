@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Clock, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteCookedHistory, listCookedHistory } from '../../../db/cookedHistoryRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import type { CookedRecipeHistory, HistoryStackScreenProps } from '../../../types';
 
@@ -20,6 +21,7 @@ export function HistoryScreen({ navigation }: Props) {
   const { language, t } = useI18n();
   const [history, setHistory] = useState<CookedRecipeHistory[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<CookedRecipeHistory | null>(null);
 
   useEffect(() => {
     navigation.setOptions({
@@ -49,17 +51,18 @@ export function HistoryScreen({ navigation }: Props) {
   const timelineItems = useMemo(() => buildTimelineItems(history, language, t), [history, language, t]);
 
   const removeItem = (item: CookedRecipeHistory) => {
-    Alert.alert(t('history.deleteTitle'), t('history.deleteBody', { title: item.title }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          await deleteCookedHistory(item.id);
-          await loadHistory();
-        },
-      },
-    ]);
+    setPendingDeletion(item);
+  };
+
+  const confirmRemoveItem = async () => {
+    const item = pendingDeletion;
+    setPendingDeletion(null);
+    if (!item) {
+      return;
+    }
+
+    await deleteCookedHistory(item.id);
+    await loadHistory();
   };
 
   return (
@@ -101,6 +104,17 @@ export function HistoryScreen({ navigation }: Props) {
             </View>
           )
         }
+      />
+      <AppConfirmModal
+        visible={pendingDeletion !== null}
+        title={t('history.deleteTitle')}
+        message={t('history.deleteBody', { title: pendingDeletion?.title ?? '' })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.delete')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={() => void confirmRemoveItem()}
       />
     </SafeAreaView>
   );
