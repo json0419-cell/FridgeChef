@@ -6,6 +6,7 @@ import { AppCard, AppTextInput, Button, StatusBadge } from '../../../shared/comp
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { addIngredients } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { spacing, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, IngredientDraft } from '../../../types';
 
@@ -89,7 +90,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       showFeedback({
         tone: 'error',
         title: t('confirm.addFailed'),
-        message: error instanceof Error ? error.message : t('common.unknown'),
+        message: localizeError(error, t),
       });
     } finally {
       setSaving(false);

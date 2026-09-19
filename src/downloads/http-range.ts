@@ -1,3 +1,5 @@
+import { UserFacingError } from '../errors/user-facing-error.ts';
+
 export interface ByteRange {
   start: number;
   end: number;
@@ -17,7 +19,7 @@ export function nextByteRange(offset: number, totalBytes: number, chunkBytes: nu
     offset >= totalBytes ||
     chunkBytes <= 0
   ) {
-    throw new Error('HTTP Range 参数无效。');
+    throw new UserFacingError('DOWNLOAD_RANGE_PARAMS_INVALID', 'HTTP range parameters are invalid.');
   }
 
   return { start: offset, end: Math.min(totalBytes - 1, offset + chunkBytes - 1) };
@@ -57,13 +59,13 @@ export function validateRangeResponse(
 
   if (status === 200) {
     if (requested.start !== 0 || requested.end !== totalBytes - 1 || receivedBytes !== totalBytes) {
-      throw new Error('下载服务器不支持安全的断点续传。');
+      throw new UserFacingError('DOWNLOAD_RESUME_UNSUPPORTED', 'The download server does not support safe resuming.');
     }
     return;
   }
 
   if (status !== 206) {
-    throw new Error(`分块下载失败 (${status})。`);
+    throw new UserFacingError('DOWNLOAD_CHUNK_FAILED', `Chunked download failed (${status}).`, { status });
   }
 
   const contentRange = parseContentRange(contentRangeHeader);
@@ -74,6 +76,6 @@ export function validateRangeResponse(
     contentRange.total !== totalBytes ||
     receivedBytes !== expectedBytes
   ) {
-    throw new Error('下载服务器返回了无效的 Content-Range。');
+    throw new UserFacingError('DOWNLOAD_CONTENT_RANGE_INVALID', 'The download server returned an invalid Content-Range.');
   }
 }

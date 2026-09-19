@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import type { AiProvider, AppSettings } from '../types';
+import { UserFacingError } from '../errors/user-facing-error';
 import {
   clearStoredApiKey,
   getOrMigrateApiKey,
@@ -81,7 +82,7 @@ export async function getApiKey(provider: AiProvider): Promise<string | null> {
 export async function saveApiKey(provider: AiProvider, apiKey: string): Promise<void> {
   const trimmed = apiKey.trim();
   if (!trimmed) {
-    throw new Error('API Key 不能为空。');
+    throw new UserFacingError('API_KEY_EMPTY', 'The API key cannot be empty.');
   }
 
   await saveSecureApiKey(provider, trimmed, credentialStore, ordinaryStore);

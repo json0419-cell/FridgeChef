@@ -21,6 +21,7 @@ import {
 } from '../../../storage/installed-source-registry';
 import { listUserRecipeLibraries, listUserRecipes } from '../../../db/userRecipesRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import type { DatasetIndexEntry, InstalledDataset, RecipesStackScreenProps } from '../../../types';
 
@@ -103,7 +104,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
       const index = await fetchDatasetIndex();
       setOfficialDatasets(index.datasets);
     } catch (error) {
-      setOfficialError(error instanceof Error ? error.message : t('dataset.fetchOfficialFailed'));
+      setOfficialError(localizeError(error, t));
     } finally {
       setOfficialLoading(false);
     }
@@ -148,7 +149,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         showFeedback({
           tone: 'error',
           title: t('dataset.installFailed'),
-          message: error instanceof Error ? error.message : t('common.unknown'),
+          message: localizeError(error, t),
         });
       }
     } finally {
@@ -172,7 +173,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         showFeedback({
           tone: 'error',
           title: t('dataset.installFailed'),
-          message: error instanceof Error ? error.message : t('common.unknown'),
+          message: localizeError(error, t),
         });
       }
     } finally {
@@ -196,7 +197,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         showFeedback({
           tone: 'error',
           title: t('dataset.toggleFailed'),
-          message: error instanceof Error ? error.message : t('common.unknown'),
+          message: localizeError(error, t),
         });
       }
       return;
@@ -226,7 +227,7 @@ export function DatasetLibraryScreen({ navigation }: Props) {
         showFeedback({
           tone: 'error',
           title: t('dataset.deleteFailed'),
-          message: error instanceof Error ? error.message : t('common.unknown'),
+          message: localizeError(error, t),
         });
       }
     }

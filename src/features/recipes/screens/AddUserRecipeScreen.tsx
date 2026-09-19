@@ -16,6 +16,7 @@ import {
 } from '../../../db/userRecipesRepository';
 import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { indexPersonalRecipeEmbedding } from '../../../rag/personalRagService';
 import { getApiKey } from '../../../storage/settingsStorage';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
@@ -607,7 +608,7 @@ function difficultyLabel(value: UserRecipeDifficulty, t: TFunction) {
 }
 
 function formatError(error: unknown, t: TFunction) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 const styles = StyleSheet.create({

@@ -13,6 +13,26 @@ import {
   validatePackFiles,
 } from '../src/downloads/pack-security.ts';
 import { calculateStreamingSha256 } from '../src/downloads/streaming-sha256.ts';
+import { UserFacingError } from '../src/errors/user-facing-error.ts';
+
+/** Assertions name the stable code, never the prose: the prose is translated at the UI boundary. */
+function throwsCode(run: () => unknown, code: string) {
+  assert.throws(run, (error: unknown) => {
+    assert.ok(error instanceof UserFacingError, `expected a UserFacingError, got ${String(error)}`);
+    assert.equal(error.code, code);
+    // The English fallback is what reaches logs and Diagnostic Information, so it may never be empty.
+    assert.ok(error.message.length > 0);
+    return true;
+  });
+}
+
+async function rejectsCode(run: () => Promise<unknown>, code: string) {
+  await assert.rejects(run, (error: unknown) => {
+    assert.ok(error instanceof UserFacingError);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -36,16 +56,20 @@ test('rejects traversal, absolute, ambiguous, and backslash paths', () => {
   ];
 
   for (const path of invalidPaths) {
-    assert.throws(() => normalizePackRelativePath(path), /路径/);
+    assert.throws(() => normalizePackRelativePath(path), (error: unknown) => {
+      assert.ok(error instanceof UserFacingError);
+      assert.match(error.code, /^PACK_FILE_PATH_/);
+      return true;
+    });
   }
 });
 
 test('accepts only credential-free HTTPS URLs', () => {
   assert.equal(assertHttpsUrl('https://example.com/pack.json', 'URL').protocol, 'https:');
-  assert.throws(() => assertHttpsUrl('http://example.com/pack.json', 'URL'), /HTTPS/);
-  assert.throws(() => assertHttpsUrl('file:///tmp/pack.json', 'URL'), /HTTPS/);
-  assert.throws(() => assertHttpsUrl('https://user:secret@example.com/pack.json', 'URL'), /凭据/);
-  assert.throws(() => assertHttpsUrl('https://example.com/pack.json#fragment', 'URL'), /片段/);
+  throwsCode(() => assertHttpsUrl('http://example.com/pack.json', 'URL'), 'PACK_URL_NOT_SECURE');
+  throwsCode(() => assertHttpsUrl('file:///tmp/pack.json', 'URL'), 'PACK_URL_NOT_SECURE');
+  throwsCode(() => assertHttpsUrl('https://user:secret@example.com/pack.json', 'URL'), 'PACK_URL_NOT_SECURE');
+  throwsCode(() => assertHttpsUrl('https://example.com/pack.json#fragment', 'URL'), 'PACK_URL_NOT_SECURE');
 });
 
 test('resolves relative pack URLs beside the manifest', () => {
@@ -66,35 +90,44 @@ test('validates roles, unique paths, sizes, URLs, and SHA-256 values', () => {
   ];
   assert.doesNotThrow(() => validatePackFiles(validFiles, ['vectors', 'metadata'], 'Dataset pack'));
 
-  assert.throws(
+  throwsCode(
     () => validatePackFiles([{ ...validFiles[0], sha256: undefined }, validFiles[1]], ['vectors', 'metadata'], 'Dataset pack'),
-    /SHA-256/,
+    'PACK_FILE_SHA256_MISSING',
   );
-  assert.throws(
+  throwsCode(
     () => validatePackFiles([validFiles[0], { ...validFiles[1], path: validFiles[0].path }], ['vectors'], 'Dataset pack'),
-    /重复文件路径/,
+    'PACK_FILE_PATH_DUPLICATE',
   );
-  assert.throws(
+  throwsCode(
     () => validatePackFiles([{ ...validFiles[0], sizeBytes: MAX_PACK_FILE_BYTES + 1 }, validFiles[1]], ['vectors'], 'Dataset pack'),
-    /大小上限/,
+    'PACK_FILE_SIZE_EXCEEDED',
   );
-  assert.throws(() => validatePackFiles([validFiles[0]], ['vectors', 'metadata'], 'Dataset pack'), /metadata/);
+  assert.throws(() => validatePackFiles([validFiles[0]], ['vectors', 'metadata'], 'Dataset pack'), (error: unknown) => {
+    assert.ok(error instanceof UserFacingError);
+    assert.equal(error.code, 'PACK_REQUIRED_ROLES_MISSING');
+    // The missing role travels as a parameter so the UI can name it in the user's language.
+    assert.match(String(error.params.roles), /metadata/);
+    return true;
+  });
 });
 
 test('validates the complete dataset manifest before downloading', () => {
   const manifest = createManifest();
   assert.doesNotThrow(() => validateDatasetManifest(manifest));
 
-  assert.throws(() => validateDatasetManifest({ ...manifest, embedding: { ...manifest.embedding, dtype: 'int8' } }), /float32/);
-  assert.throws(
+  throwsCode(
+    () => validateDatasetManifest({ ...manifest, embedding: { ...manifest.embedding, dtype: 'int8' } }),
+    'DATASET_MANIFEST_FLOAT32_EMBEDDING_MISSING',
+  );
+  throwsCode(
     () => validateDatasetManifest({ ...manifest, files: [{ ...manifest.files[0], path: '../vectors.f32' }, manifest.files[1]] }),
-    /相对路径/,
+    'PACK_FILE_PATH_NOT_RELATIVE',
   );
 });
 
 test('compares SHA-256 values without case ambiguity', () => {
   assert.doesNotThrow(() => assertSha256Matches(HASH_A.toUpperCase(), HASH_A, 'vectors.f32'));
-  assert.throws(() => assertSha256Matches(HASH_A, HASH_B, 'vectors.f32'), /校验失败/);
+  throwsCode(() => assertSha256Matches(HASH_A, HASH_B, 'vectors.f32'), 'PACK_FILE_SHA256_MISMATCH');
 });
 
 test('streams SHA-256 without loading a whole file', async () => {
@@ -114,7 +147,7 @@ test('streams SHA-256 without loading a whole file', async () => {
   assert.equal(digest, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   // Verifying a multi-gigabyte model file must report a live byte count, not a single jump at the end.
   assert.deepEqual(hashedBytes, [0, 2, 3]);
-  await assert.rejects(() => calculateStreamingSha256(3, () => new Uint8Array()), /提前结束/);
+  await rejectsCode(() => calculateStreamingSha256(3, () => new Uint8Array()), 'SHA256_STREAM_TRUNCATED');
 });
 
 test('keeps destructive cleanup inside the datasets root', () => {

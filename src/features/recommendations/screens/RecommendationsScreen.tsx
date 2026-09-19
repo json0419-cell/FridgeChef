@@ -17,6 +17,7 @@ import {
 import { markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
 import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError, localizeErrorCode } from '../../../i18n/error-messages';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { downloadEmbeddingModelPack, type ModelDownloadProgress } from '../../../rag/model/modelPack';
 import { getRagRecommendations, type RagResult } from '../../../rag/ragService';
@@ -1350,7 +1351,11 @@ function formatRagUnavailableMessage(ragResult: RagResult, t: TFunction) {
   }
 
   if (ragResult.reason === 'runtime_error') {
-    return t('recommendations.ragRuntimeError', { message: ragResult.message.replace(/^RAG 运行失败：/, '') });
+    // `message` stays English for logs, so only a carried code can be shown in the user's language.
+    const message = ragResult.errorCode
+      ? localizeErrorCode(ragResult.errorCode, ragResult.errorParams, t)
+      : ragResult.message;
+    return t('recommendations.ragRuntimeError', { message });
   }
 
   return ragResult.message;
@@ -1498,11 +1503,7 @@ function sameRequestTag(left: string, right: string) {
 }
 
 function formatError(error: unknown, t: TFunction) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 function formatGeminiRecommendationError(error: unknown, t: TFunction) {

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserFacingError } from '../errors/user-facing-error';
 
 const AI_DATA_CONSENT_KEY = 'privacy.aiDataConsent.v1';
 
@@ -16,6 +17,6 @@ export async function revokeAiDataConsent() {
 
 export async function assertAiDataConsent() {
   if (!(await hasAiDataConsent())) {
-    throw new Error('使用 Gemini 前需要先阅读并同意 AI 数据披露。');
+    throw new UserFacingError('AI_DATA_CONSENT_REQUIRED', 'Read and accept the AI data disclosure before using Gemini.');
   }
 }

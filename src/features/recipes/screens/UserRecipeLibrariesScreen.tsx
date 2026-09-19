@@ -14,6 +14,7 @@ import {
 } from '../../../db/userRecipesRepository';
 import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import type { RecipesStackScreenProps, UserRecipeLibrary } from '../../../types';
 
@@ -216,7 +217,7 @@ function ActionButton({
 }
 
 function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 const styles = StyleSheet.create({
