@@ -13,16 +13,19 @@ change no product behavior.
 
 ## Builds
 
-Four builds are needed. Build A is the shipping configuration; builds B–D are the same release
+Five builds are needed. Build A is the shipping configuration; builds B–D are the same release
 configuration with one release-validation fixture selected, because an app-private database and
-app-private registries cannot be edited from `adb` on a non-debuggable build.
+app-private registries cannot be edited from `adb` on a non-debuggable build. Build E is the shipping
+configuration built from an older commit and carries no fixture: section 3 needs a database written
+before the schema-3 migration existed, and no fixture can manufacture one.
 
 | Build | Fixture variable | Sections |
 | --- | --- | --- |
-| A | _unset_ | [1](#1-credential-capture-protection), [3](#3-backuprestore-round-trip) |
+| A | _unset_ | [1](#1-credential-capture-protection), [3](#3-migration-upgrade), [4](#4-backuprestore-round-trip) |
 | B | `failDatabaseUpgrade` | [2](#2-migration-recovery) |
-| C | `corruptDatasetRegistry` | [4](#4-installed-source-recovery) |
-| D | `corruptModelRegistry` | [4](#4-installed-source-recovery) |
+| C | `corruptDatasetRegistry` | [5](#5-installed-source-recovery) |
+| D | `corruptModelRegistry` | [5](#5-installed-source-recovery) |
+| E | _unset_, built from `70f3503` | [3](#3-migration-upgrade) |
 
 ```powershell
 # Build A — shipping configuration. Confirm the variable is not set first.
@@ -62,7 +65,7 @@ shell, rebuild, and start again.
 
 ### Seed data
 
-Before sections 2 and 3, set up from a clean install on build A so there is state worth losing:
+Before sections 2 and 4, set up from a clean install on build A so there is state worth losing:
 
 1. Add at least three Confirmed Ingredients, one with a non-ASCII name.
 2. Save one Personal Recipe and mark one recipe cooked, so `user_recipes` and `cooked_history` hold
@@ -72,8 +75,11 @@ Before sections 2 and 3, set up from a clean install on build A so there is stat
 5. Change a non-sensitive setting (app language) away from its default.
 6. Generate one Recommendation batch so a cache exists.
 
-Record the ingredient count, the Personal Recipe title, and the chosen language — sections 2 and 3
+Record the ingredient count, the Personal Recipe title, and the chosen language — sections 2 and 4
 compare against them.
+
+Section 3 does not use this seed data. It starts from its own clean install on build E, because the
+upgrade it checks can only be observed on a database written before schema 3.
 
 ## 1. Credential capture protection
 
@@ -122,7 +128,66 @@ guarantee — but not mid-migration transaction rollback, which `tests/database-
 covers. A fixture that failed partway through a migration would leave a release build unable to start
 if the tester stopped there, so it is deliberately not offered here.
 
-## 3. Backup/restore round trip
+## 3. Migration upgrade
+
+This is the only check that exercises the schema 2 → 3 upgrade on real data, and the only one that
+closes a one-way door: the migration rewrites rows the app itself wrote, so once a device has run it,
+a pre-migration build can no longer read those rows correctly. Run it before any build goes out.
+
+Build E is the shipping configuration built from `70f3503`, the last commit before the migration
+landed, so its database stops at schema 2. It carries no fixture.
+
+```powershell
+git switch --detach 70f3503
+Remove-Item Env:EXPO_PUBLIC_VALIDATION_FIXTURES -ErrorAction SilentlyContinue
+npx expo run:android --variant release
+git switch main
+```
+
+### Seed on build E
+
+From a clean install, with the app language left at **中文**:
+
+1. Leave the first-run Personal Recipe Library at its default name, `我的菜谱库`. Do not rename it.
+2. Save one Personal Recipe with no title, so it stores the default `未命名菜谱`.
+3. Mark that recipe cooked, so `cooked_history` holds a row with the same default title.
+4. Create one library named `冰箱剩菜` and one recipe titled `番茄炒蛋` — text the user typed, which the
+   migration must not touch.
+5. Add one Custom Ingredient and accept the default unit `份` on the confirm screen.
+
+Under schema 2 these defaults are stored as the literal Chinese wording. That is the state the
+migration has to find.
+
+### Upgrade
+
+Install build A over it — `adb install -r <path-to-release.apk>`. Do not uninstall and do not
+`pm clear`: carrying the schema-2 database forward is the entire point.
+
+1. The app reaches the tab bar. No migration recovery screen.
+2. Still in 中文, the default library reads `我的菜谱库` and the default recipe reads `未命名菜谱`, in
+   Personal Recipes, in cooked history, and in the Recommendations source line. **Nothing visibly
+   changed — that is the pass condition**, not evidence that the migration did not run.
+3. `冰箱剩菜` and `番茄炒蛋` are unchanged.
+4. Switch the app language to **English**. The two defaults now read `My Recipe Library` and
+   `Untitled recipe`; the two typed names stay in Chinese. This is the step that proves the rows were
+   rewritten rather than left frozen — if the defaults are still Chinese here, the migration did not
+   run or did not match.
+5. The Custom Ingredient's unit still reads `份` in English. Units are user input — the user saw and
+   confirmed `份` on the confirm screen — so the migration deliberately leaves them alone. A unit that
+   follows the language is a failure, not an improvement.
+6. Switch back to 中文 and confirm step 2 still holds.
+7. Force-stop and relaunch. Steps 2–5 are unchanged.
+
+### Downgrade — record, do not file
+
+The marker the migration writes is the empty string (`src/db/seeded-defaults.ts`), which schema 2 code
+has no reading for. Install build E back over the upgraded database once, with
+`adb install -r -d <path-to-build-E.apk>`, and record what the user would see — expected to be blank
+names where the defaults were. This is the known cost of the one-way door, so **do not file it as a
+defect**; record it so support recognizes it. Recover with
+`adb shell pm clear com.chishenme.fridgechef`.
+
+## 4. Backup/restore round trip
 
 Build A, with the seeded data. Android's backup transport must be available and the device signed in.
 
@@ -145,6 +210,9 @@ then has to overwrite.
 - Every Confirmed Ingredient, including the non-ASCII name, at the recorded count.
 - The Personal Recipe and the cooked-history entry.
 - The chosen app language and other non-sensitive settings.
+- A Personal Recipe Library left at its default name still reads as a default afterwards, and still
+  follows the app language when it is switched — the marker has to survive the backup round trip, not
+  come back as a blank name.
 
 **Does not return (must be absent after restore):**
 
@@ -171,7 +239,7 @@ Repeat with a device-to-device transfer where two devices are available; the `de
 extraction rules are configured separately from `cloud-backup`, so both need a pass. If no second
 device is available, record device transfer as **not run** rather than as a pass.
 
-## 4. Installed-source recovery
+## 5. Installed-source recovery
 
 Build C, then build D, each installed over seeded build A data. The fixture stores a corrupt registry
 envelope, so the corruption persists across relaunches exactly as real corruption would; leave the
@@ -203,7 +271,7 @@ Build D — corrupt **model** registry: repeat steps 1–6 against Recipe Recomm
 
 Both recovery surfaces tell the user to long-press to copy, but render the text with
 `<Text selectable>` (`src/application/App.tsx`, `src/shared/components/InstalledSourceRecoveryCard.tsx`)
-rather than an explicit copy action. Section 2 step 3 and section 4 step 4 exist to settle whether
+rather than an explicit copy action. Section 2 step 3 and section 5 step 4 exist to settle whether
 long-press selection actually exposes **Copy** on a release build. If it does not — on any device in
 the matrix — file a defect for an explicit copy action instead of adjusting the check.
 
@@ -224,8 +292,10 @@ was made from.
 | --- | --- | --- |
 | 1. Credential capture protection | pass / fail / not run | |
 | 2. Migration recovery | pass / fail / not run | |
-| 3. Backup/restore (cloud backup) | pass / fail / not run | |
-| 3. Backup/restore (device transfer) | pass / fail / not run | |
-| 4. Dataset registry recovery | pass / fail / not run | |
-| 4. Model registry recovery | pass / fail / not run | |
+| 3. Migration upgrade (schema 2 → 3) | pass / fail / not run | |
+| 3. Downgrade behavior recorded | yes / no | |
+| 4. Backup/restore (cloud backup) | pass / fail / not run | |
+| 4. Backup/restore (device transfer) | pass / fail / not run | |
+| 5. Dataset registry recovery | pass / fail / not run | |
+| 5. Model registry recovery | pass / fail / not run | |
 | Diagnostic copy on device | pass / fail / not run | |
