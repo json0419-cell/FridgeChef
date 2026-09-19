@@ -5,6 +5,8 @@
  * trie 的一次命中返回规范化字符串在最后一段中的偏移量。
  */
 
+import { UserFacingError } from '../../errors/user-facing-error.ts';
+
 const HAS_LEAF_BIT = 0x100;
 const EXTENSION_BIT = 0x200;
 const VALUE_MASK = 0x7fffffff;
@@ -21,12 +23,12 @@ export class PrecompiledCharsMap {
 
   static fromBlob(blob: Uint8Array): PrecompiledCharsMap {
     if (blob.length < 4) {
-      throw new Error('precompiled_charsmap 数据不完整。');
+      throw new UserFacingError('TOKENIZER_CHARSMAP_INCOMPLETE', 'The precompiled_charsmap data is incomplete.');
     }
 
     const trieByteLength = readUint32LittleEndian(blob, 0);
     if (trieByteLength % 4 !== 0 || trieByteLength + 4 > blob.length) {
-      throw new Error('precompiled_charsmap trie 长度无效。');
+      throw new UserFacingError('TOKENIZER_CHARSMAP_TRIE_INVALID', 'The precompiled_charsmap trie length is invalid.');
     }
 
     const trie = new Uint32Array(trieByteLength / 4);

@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Apple, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIngredientInventory } from '../hooks/useIngredientInventory';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { Button } from '../../../shared/components';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
@@ -128,7 +129,7 @@ export function FridgeScreen({ navigation }: Props) {
             <View style={styles.ingredientSummary}>
               <Text style={styles.ingredientName}>{item.name}</Text>
               <Text style={styles.meta}>
-                {formatQuantity(item.quantity)} {item.unit}
+                {formatQuantity(item.quantity)} {resolveSeededDefault(item.unit, t('common.defaultUnit'))}
               </Text>
               <Text style={styles.sourceText}>
                 {item.source === 'photo' ? t('home.sourceAi') : t('home.sourceManual')} · {formatDate(item.createdAt, language)}

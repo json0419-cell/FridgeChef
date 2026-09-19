@@ -14,7 +14,9 @@ import {
   listUserRecipes,
   updateUserRecipe,
 } from '../../../db/userRecipesRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { indexPersonalRecipeEmbedding } from '../../../rag/personalRagService';
 import { getApiKey } from '../../../storage/settingsStorage';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
@@ -273,7 +275,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
                   style={[styles.choiceChip, library.id === libraryId && styles.choiceChipActive]}
                 >
                   <Text style={[styles.choiceChipText, library.id === libraryId && styles.choiceChipTextActive]}>
-                    {library.name}
+                    {resolveSeededDefault(library.name, t('userLibraries.defaultName'))}
                   </Text>
                 </Pressable>
               ))}
@@ -606,7 +608,7 @@ function difficultyLabel(value: UserRecipeDifficulty, t: TFunction) {
 }
 
 function formatError(error: unknown, t: TFunction) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 const styles = StyleSheet.create({

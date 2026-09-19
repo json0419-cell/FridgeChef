@@ -9,6 +9,7 @@ import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { recognizeFoodWithProvider } from '../../../ai/providerAdapter';
 import { addIngredient, getIngredientById, updateIngredient } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { getApiKey, hasApiKey } from '../../../storage/settingsStorage';
 import { colors, spacing } from '../../../shared/theme/theme';
@@ -134,7 +135,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
       showFeedback({
         tone: 'error',
         title: t('addIngredient.recognitionFailed'),
-        message: error instanceof Error ? error.message : t('common.unknown'),
+        message: localizeError(error, t),
       });
     } finally {
       setRecognizing(false);
@@ -161,13 +162,13 @@ export function AddIngredientScreen({ navigation, route }: Props) {
           ...existing,
           name: trimmedName,
           quantity: parsedQuantity,
-          unit: unit.trim() || t('common.defaultUnit'),
+          unit: unit.trim(),
         });
       } else {
         await addIngredient({
           name: trimmedName,
           quantity: parsedQuantity,
-          unit: unit.trim() || t('common.defaultUnit'),
+          unit: unit.trim(),
           source: 'manual',
         });
       }
@@ -180,7 +181,7 @@ export function AddIngredientScreen({ navigation, route }: Props) {
       showFeedback({
         tone: 'error',
         title: t('addIngredient.saveFailed'),
-        message: error instanceof Error ? error.message : t('common.unknown'),
+        message: localizeError(error, t),
       });
     } finally {
       setSaving(false);

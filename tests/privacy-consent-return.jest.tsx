@@ -1,12 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PrivacyPolicyScreen } from '../src/features/settings/screens/PrivacyPolicyScreen';
 import { hasAiDataConsent } from '../src/privacy/ai-data-consent';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -22,17 +21,13 @@ async function renderFrom(openParams: object | undefined) {
     </Pressable>
   );
 
-  const screen = await render(
-    <I18nProvider>
-      <AppFeedbackProvider>
-        <NavigationContainer>
-          <Stack.Navigator>
-            <Stack.Screen name="Origin" component={Origin} />
-            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen as never} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AppFeedbackProvider>
-    </I18nProvider>,
+  const screen = await renderWithAppProviders(
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Origin" component={Origin} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen as never} />
+      </Stack.Navigator>
+    </NavigationContainer>,
   );
   await fireEvent.press(await screen.findByRole('button', { name: 'Open disclosure' }));
   await fireEvent.press(await screen.findByRole('button', { name: 'Agree to AI Data Disclosure' }));

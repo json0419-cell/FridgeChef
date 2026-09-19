@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSingleFlight } from '../src/downloads/single-flight.ts';
+import { UserFacingError } from '../src/errors/user-facing-error.ts';
+
+async function rejectsCode(run: () => Promise<unknown>, code: string) {
+  await assert.rejects(run, (error: unknown) => {
+    assert.ok(error instanceof UserFacingError);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
 
 test('repeated taps join the running download instead of starting a second one', async () => {
   const run = createSingleFlight<string>();
@@ -28,17 +37,21 @@ test('a failed download is reported to every caller and does not block a retry',
   let attempts = 0;
   const failing = () => {
     attempts += 1;
-    return Promise.reject(new Error('模型文件大小不匹配：files/tokenizer.onnx'));
+    return Promise.reject(
+      new UserFacingError('MODEL_FILE_SIZE_MISMATCH', 'The model file size does not match: files/tokenizer.onnx', {
+        path: 'files/tokenizer.onnx',
+      }),
+    );
   };
 
   const first = run('pack', failing);
   const second = run('pack', failing);
-  await assert.rejects(first, /大小不匹配/);
-  await assert.rejects(second, /大小不匹配/);
+  await rejectsCode(() => first, 'MODEL_FILE_SIZE_MISMATCH');
+  await rejectsCode(() => second, 'MODEL_FILE_SIZE_MISMATCH');
   assert.equal(attempts, 1);
   assert.equal(run.isRunning('pack'), false);
 
-  await assert.rejects(run('pack', failing), /大小不匹配/);
+  await rejectsCode(() => run('pack', failing), 'MODEL_FILE_SIZE_MISMATCH');
   assert.equal(attempts, 2);
 });
 
@@ -56,11 +69,14 @@ test('different packs still download independently', async () => {
 
 test('a synchronous throw inside the task rejects instead of escaping', async () => {
   const run = createSingleFlight<string>();
-  await assert.rejects(
-    run('pack', () => {
-      throw new Error('拒绝写入 Model 目录之外的路径');
-    }),
-    /拒绝写入/,
+  await rejectsCode(
+    () =>
+      run('pack', () => {
+        throw new UserFacingError('MODEL_WRITE_OUTSIDE_ROOT', 'Refused to write outside the model directory: ../evil', {
+          path: '../evil',
+        });
+      }),
+    'MODEL_WRITE_OUTSIDE_ROOT',
   );
   assert.equal(run.isRunning('pack'), false);
 });

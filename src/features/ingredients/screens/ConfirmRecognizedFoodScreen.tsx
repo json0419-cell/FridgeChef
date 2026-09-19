@@ -6,6 +6,7 @@ import { AppCard, AppTextInput, Button, StatusBadge } from '../../../shared/comp
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { addIngredients } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { spacing, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, IngredientDraft } from '../../../types';
 
@@ -31,7 +32,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       localId: `${index}_${item.name}`,
       name: item.name,
       quantity: item.estimatedQuantity === null ? '' : String(item.estimatedQuantity),
-      unit: item.unit || t('common.defaultUnit'),
+      unit: item.unit,
       category: item.category,
       confidence: item.confidence,
       notes: item.notes,
@@ -66,7 +67,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       drafts.push({
         name,
         quantity,
-        unit: item.unit.trim() || t('common.defaultUnit'),
+        unit: item.unit.trim(),
         source: 'photo' as const,
       });
     }
@@ -89,7 +90,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       showFeedback({
         tone: 'error',
         title: t('confirm.addFailed'),
-        message: error instanceof Error ? error.message : t('common.unknown'),
+        message: localizeError(error, t),
       });
     } finally {
       setSaving(false);

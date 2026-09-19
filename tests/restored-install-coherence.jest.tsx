@@ -1,11 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { render } from '@testing-library/react-native';
 import { DATASET_REGISTRY_KEY } from '../src/datasets/dataset-registry-store';
 import { DatasetLibraryScreen } from '../src/features/datasets/screens/DatasetLibraryScreen';
 import { loadRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
 import { EMBEDDING_MODEL_REGISTRY_KEY } from '../src/rag/model/model-registry-store';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -122,12 +120,8 @@ describe('an install restored without its model and pack files', () => {
   it('offers the pack as not installed, keeps personal data, and never asks for registry recovery', async () => {
     const navigation = { navigate: jest.fn(), setOptions: jest.fn() };
 
-    const screen = await render(
-      <I18nProvider>
-        <AppFeedbackProvider>
-          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
-        </AppFeedbackProvider>
-      </I18nProvider>,
+    const screen = await renderWithAppProviders(
+      <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />,
     );
 
     // Personal Recipes and their libraries came back with ordinary storage and are untouched.
@@ -146,12 +140,8 @@ describe('an install restored without its model and pack files', () => {
   it('keeps a restored Unverified DatasetPack reachable instead of stranding its record', async () => {
     const navigation = { navigate: jest.fn(), setOptions: jest.fn() };
 
-    const screen = await render(
-      <I18nProvider>
-        <AppFeedbackProvider>
-          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
-        </AppFeedbackProvider>
-      </I18nProvider>,
+    const screen = await renderWithAppProviders(
+      <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />,
     );
 
     // It has no catalogue entry to reappear in, so the library lists it as not installed and says why.

@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { InstalledEmbeddingModel } from '../../types';
 import { PrecompiledCharsMap } from './precompiled-charsmap.ts';
 import { UnigramTokenizer, type UnigramVocabulary } from './unigram-tokenizer.ts';
+import { UserFacingError } from '../../errors/user-facing-error.ts';
 
 /**
  * 从 model pack 的 `tokenizer.json` 构建 tokenizer。
@@ -44,17 +45,17 @@ export function parseTokenizerJson(text: string): TokenizerData {
   const parsed = JSON.parse(text) as Record<string, unknown>;
   const model = parsed.model as Record<string, unknown> | undefined;
   if (!model || model.type !== 'Unigram' || model.byte_fallback === true) {
-    throw new Error('tokenizer.json 不是 Unigram tokenizer。');
+    throw new UserFacingError('TOKENIZER_NOT_UNIGRAM', 'tokenizer.json is not a Unigram tokenizer.');
   }
 
   const unkId = model.unk_id;
   if (!Number.isSafeInteger(unkId)) {
-    throw new Error('tokenizer.json 缺少 unk_id。');
+    throw new UserFacingError('TOKENIZER_UNK_ID_MISSING', 'tokenizer.json is missing unk_id.');
   }
 
   const entries = model.vocab;
   if (!Array.isArray(entries) || entries.length === 0) {
-    throw new Error('tokenizer.json 缺少 vocab。');
+    throw new UserFacingError('TOKENIZER_VOCAB_MISSING', 'tokenizer.json is missing vocab.');
   }
 
   const tokens = new Array<string>(entries.length);
@@ -62,7 +63,7 @@ export function parseTokenizerJson(text: string): TokenizerData {
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     if (!Array.isArray(entry) || typeof entry[0] !== 'string' || typeof entry[1] !== 'number') {
-      throw new Error('tokenizer.json vocab 条目无效。');
+      throw new UserFacingError('TOKENIZER_VOCAB_ENTRY_INVALID', 'tokenizer.json has an invalid vocab entry.');
     }
     tokens[index] = entry[0];
     scores[index] = entry[1];
@@ -90,7 +91,7 @@ function assertExpectedPipeline(parsed: Record<string, unknown>) {
     preTokenizer.replacement !== '▁' ||
     (preTokenizer.prepend_scheme !== undefined && preTokenizer.prepend_scheme !== 'always')
   ) {
-    throw new Error('tokenizer.json 的 pre_tokenizer 不是预期的 Metaspace。');
+    throw new UserFacingError('TOKENIZER_PRE_TOKENIZER_UNEXPECTED', 'The tokenizer.json pre_tokenizer is not the expected Metaspace.');
   }
 
   const normalizers = readNormalizers(parsed);
@@ -103,12 +104,12 @@ function assertExpectedPipeline(parsed: Record<string, unknown>) {
     collapseSpaces.pattern?.Regex !== ' {2,}' ||
     collapseSpaces.content !== ' '
   ) {
-    throw new Error('tokenizer.json 的 normalizer 不是预期的空白折叠规则。');
+    throw new UserFacingError('TOKENIZER_NORMALIZER_UNEXPECTED', 'The tokenizer.json normalizer is not the expected whitespace-collapsing rule.');
   }
 
   const single = (parsed.post_processor as { single?: unknown[] } | undefined)?.single;
   if (JSON.stringify(single) !== JSON.stringify(EXPECTED_POST_PROCESSOR_SINGLE)) {
-    throw new Error('tokenizer.json 的 post_processor 不是预期的 <s> A </s>。');
+    throw new UserFacingError('TOKENIZER_POST_PROCESSOR_UNEXPECTED', 'The tokenizer.json post_processor is not the expected <s> A </s>.');
   }
 }
 
@@ -123,7 +124,7 @@ function readCharsMapBase64(parsed: Record<string, unknown>) {
     | undefined;
 
   if (!precompiled || precompiled.type !== 'Precompiled' || typeof precompiled.precompiled_charsmap !== 'string') {
-    throw new Error('tokenizer.json 缺少 precompiled_charsmap。');
+    throw new UserFacingError('TOKENIZER_CHARSMAP_MISSING', 'tokenizer.json is missing precompiled_charsmap.');
   }
   return precompiled.precompiled_charsmap;
 }
@@ -218,7 +219,7 @@ export function decodeBase64(text: string): Uint8Array {
       if (code === 9 || code === 10 || code === 13 || code === 32) {
         continue;
       }
-      throw new Error('precompiled_charsmap 不是合法的 base64。');
+      throw new UserFacingError('TOKENIZER_CHARSMAP_BASE64_INVALID', 'precompiled_charsmap is not valid base64.');
     }
 
     buffer = (buffer << 6) | value;

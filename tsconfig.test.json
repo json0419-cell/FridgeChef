@@ -6,8 +6,10 @@
   "include": [
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "src/errors/user-facing-error.ts",
     "src/db/database-diagnostics.ts",
     "src/db/migrations.ts",
+    "src/db/seeded-defaults.ts",
     "src/storage/api-key-storage.ts",
     "src/storage/installed-source-registry.ts",
     "src/datasets/dataset-registry-store.ts",

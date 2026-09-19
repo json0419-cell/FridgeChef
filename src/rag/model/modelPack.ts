@@ -8,9 +8,11 @@ import {
   isChildUri,
   normalizePackRelativePath,
   normalizeSha256,
+  parsePackJsonResponseText,
   requiredAvailableBytes,
   resolveSecurePackFileUrl,
 } from '../../downloads/pack-security';
+import { UserFacingError, hasUserFacingErrorCode } from '../../errors/user-facing-error';
 import {
   backupDirectoryName,
   resumableStagingDirectoryName,
@@ -216,26 +218,26 @@ export async function fetchEmbeddingModelManifest(manifestUrl: string): Promise<
   try {
     const response = await fetch(normalizedManifestUrl, { signal: controller.signal });
     if (!response.ok) {
-      throw new Error(`无法下载 ONNX 模型 manifest (${response.status})`);
+      throw new UserFacingError('MODEL_MANIFEST_DOWNLOAD_FAILED', `Could not download the ONNX model manifest (${response.status}).`, { status: response.status });
     }
-    assertHttpsUrl(response.url || normalizedManifestUrl, 'Model manifest 最终 URL');
+    assertHttpsUrl(response.url || normalizedManifestUrl, 'Model manifest final URL');
 
     const declaredLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MANIFEST_CHARACTERS) {
-      throw new Error('Model manifest 超过允许大小。');
+      throw new UserFacingError('MODEL_MANIFEST_TOO_LARGE', 'The model manifest is larger than allowed.');
     }
 
     const text = await response.text();
     if (text.length > MAX_MANIFEST_CHARACTERS) {
-      throw new Error('Model manifest 超过允许大小。');
+      throw new UserFacingError('MODEL_MANIFEST_TOO_LARGE', 'The model manifest is larger than allowed.');
     }
 
-    const manifest = parseJsonResponseText(text, 'ONNX 模型 manifest');
+    const manifest = parsePackJsonResponseText(text, 'ONNX model manifest');
     validateEmbeddingModelManifest(manifest);
     return manifest;
   } catch (error) {
     if (isAbortError(error)) {
-      throw new Error('下载 ONNX 模型 manifest 超时。');
+      throw new UserFacingError('MODEL_MANIFEST_DOWNLOAD_TIMEOUT', 'Downloading the ONNX model manifest timed out.');
     }
     throw error;
   } finally {
@@ -284,7 +286,9 @@ async function downloadAndVerifyModelFile(
 
   while (offset < entry.sizeBytes) {
     if (attemptsWithoutProgress >= MAX_DOWNLOAD_ATTEMPTS) {
-      throw lastError instanceof Error ? lastError : new Error(`模型文件下载失败：${entry.path}`);
+      throw lastError instanceof Error
+        ? lastError
+        : new UserFacingError('MODEL_FILE_DOWNLOAD_FAILED', `Model file download failed: ${entry.path}`, { path: entry.path });
     }
 
     const offsetBeforeAttempt = offset;
@@ -313,13 +317,13 @@ async function downloadAndVerifyModelFile(
 
   const info = destination.info();
   if (info.size !== entry.sizeBytes) {
-    throw new Error(`模型文件大小不匹配：${entry.path}`);
+    throw new UserFacingError('MODEL_FILE_SIZE_MISMATCH', `Model file size does not match for ${entry.path}.`, { path: entry.path });
   }
 
   const actualSha256 = await calculateFileSha256(destination, entry.sizeBytes, report.onVerified);
   if (actualSha256 !== expectedSha256) {
     destination.delete();
-    throw new Error(`模型文件 SHA-256 校验失败，已删除损坏文件：${entry.path}`);
+    throw new UserFacingError('MODEL_FILE_SHA256_MISMATCH', `Model file SHA-256 check failed; the corrupt file was deleted: ${entry.path}`, { path: entry.path });
   }
 
   return entry.sizeBytes;
@@ -371,13 +375,13 @@ async function downloadRemainingBytes(
     });
   } catch (error) {
     if (exceededRange) {
-      throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
+      throw new UserFacingError('MODEL_FILE_RESUME_UNSUPPORTED', `The download server does not support safe resuming for ${entry.path}.`, { path: entry.path });
     }
     throw error;
   }
 
   if (exceededRange) {
-    throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
+    throw new UserFacingError('MODEL_FILE_RESUME_UNSUPPORTED', `The download server does not support safe resuming for ${entry.path}.`, { path: entry.path });
   }
 
   if (streamsToDestination) {
@@ -387,7 +391,7 @@ async function downloadRemainingBytes(
   const partBytes = readExistingFileSize(partFile);
   if (partBytes > remainingBytes) {
     removeFileIfPresent(partFile);
-    throw new Error(`下载服务器不支持安全的断点续传：${entry.path}`);
+    throw new UserFacingError('MODEL_FILE_RESUME_UNSUPPORTED', `The download server does not support safe resuming for ${entry.path}.`, { path: entry.path });
   }
 
   appendFileContents(destination, partFile);
@@ -413,10 +417,10 @@ async function resolveFinalFileUrl(remoteUrl: string, entry: EmbeddingModelPackF
 
     const declaredLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(declaredLength) && declaredLength > 0 && declaredLength !== entry.sizeBytes) {
-      throw new Error(`模型文件大小与 manifest 声明不一致：${entry.path}`);
+      throw new UserFacingError('MODEL_FILE_SIZE_MANIFEST_MISMATCH', `Model file size contradicts the manifest for ${entry.path}.`, { path: entry.path });
     }
 
-    return assertHttpsUrl(response.url || remoteUrl, 'Model file 最终 URL').toString();
+    return assertHttpsUrl(response.url || remoteUrl, 'Model file final URL').toString();
   } catch (error) {
     if (isAbortError(error) || error instanceof TypeError) {
       return remoteUrl;
@@ -518,7 +522,7 @@ function fileForRelativePath(root: Directory, relativePath: string) {
 
   const file = new File(current, parts[parts.length - 1]);
   if (!isChildUri(root.uri, file.uri)) {
-    throw new Error(`拒绝写入 Model 目录之外的路径：${relativePath}`);
+    throw new UserFacingError('MODEL_WRITE_OUTSIDE_ROOT', `Refused to write outside the model directory: ${relativePath}`, { path: relativePath });
   }
   return file;
 }
@@ -546,7 +550,7 @@ function assertSufficientDiskSpace(remainingBytes: number) {
   const available = Paths.availableDiskSpace;
   const required = requiredAvailableBytes(remainingBytes);
   if (Number.isFinite(available) && available > 0 && available < required) {
-    throw new Error(`存储空间不足：完成模型下载至少需要 ${formatBytes(required)} 可用空间。`);
+    throw new UserFacingError('MODEL_STORAGE_INSUFFICIENT', `Not enough storage: finishing the model download needs at least ${formatBytes(required)} free.`, { required: formatBytes(required) });
   }
 }
 
@@ -561,32 +565,35 @@ function removeDirectoryIfPresent(root: Directory, directory: Directory | null) 
     return;
   }
   if (!isChildUri(root.uri, directory.uri)) {
-    throw new Error('拒绝删除 models 目录之外的文件。');
+    throw new UserFacingError('MODEL_DELETE_OUTSIDE_ROOT', 'Refused to delete a file outside the models directory.');
   }
   directory.delete();
 }
 
-function parseJsonResponseText(text: string, label: string) {
-  const normalized = text.replace(/^\uFEFF/, '').trim();
-  try {
-    return JSON.parse(normalized) as unknown;
-  } catch {
-    throw new Error(`无法解析 ${label} JSON，返回内容开头：${normalized.slice(0, 80)}`);
-  }
-}
 
 function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 
+// A server that contradicts the manifest will keep contradicting it, so these failures are final.
+const FINAL_DOWNLOAD_ERROR_CODES = [
+  'MODEL_FILE_RESUME_UNSUPPORTED',
+  'DOWNLOAD_RESUME_UNSUPPORTED',
+  'DOWNLOAD_CONTENT_RANGE_INVALID',
+  'MODEL_FILE_SIZE_MANIFEST_MISMATCH',
+  'MODEL_FILE_SHA256_MISMATCH',
+  'MODEL_WRITE_OUTSIDE_ROOT',
+  'MODEL_DELETE_OUTSIDE_ROOT',
+  'PACK_FILE_SHA256_MISSING',
+  'PACK_FILE_SHA256_MISMATCH',
+] as const;
+
 function isRetryableDownloadError(error: unknown) {
   if (isAbortError(error)) {
     return true;
   }
-  const message = error instanceof Error ? error.message : String(error);
-  // A server that contradicts the manifest will keep contradicting it, so those errors are final.
-  return !/不支持安全的断点续传|无效的 Content-Range|manifest 声明不一致|拒绝|SHA-256/.test(message);
+  return !hasUserFacingErrorCode(error, FINAL_DOWNLOAD_ERROR_CODES);
 }
 
 function isAbortError(error: unknown) {

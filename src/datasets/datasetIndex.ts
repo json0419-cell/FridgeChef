@@ -1,4 +1,6 @@
 import type { DatasetIndexEntry, DatasetIndexManifest } from '../types';
+import { parsePackJsonResponseText } from '../downloads/pack-security.ts';
+import { UserFacingError } from '../errors/user-facing-error';
 
 export const OFFICIAL_DATASET_INDEX_URL =
   'https://huggingface.co/datasets/Yatorou/ChiShenMe/resolve/main/dataset-index.json';
@@ -6,10 +8,10 @@ export const OFFICIAL_DATASET_INDEX_URL =
 export async function fetchDatasetIndex(indexUrl = OFFICIAL_DATASET_INDEX_URL): Promise<DatasetIndexManifest> {
   const response = await fetch(indexUrl);
   if (!response.ok) {
-    throw new Error(`无法下载 dataset index (${response.status})`);
+    throw new UserFacingError('DATASET_INDEX_DOWNLOAD_FAILED', `Could not download the dataset index (${response.status}).`, { status: response.status });
   }
 
-  const manifest = parseJsonResponseText(await response.text(), 'dataset index') as DatasetIndexManifest;
+  const manifest = parsePackJsonResponseText(await response.text(), 'dataset index') as DatasetIndexManifest;
   validateDatasetIndex(manifest);
   return manifest;
 }
@@ -24,25 +26,16 @@ export function resolveDatasetManifestUrl(indexUrl: string, dataset: DatasetInde
 
 function validateDatasetIndex(manifest: DatasetIndexManifest): void {
   if (manifest.schemaVersion !== 'chishenme.dataset-index.v1') {
-    throw new Error('不支持的 dataset index schema。');
+    throw new UserFacingError('DATASET_INDEX_SCHEMA_UNSUPPORTED', 'Unsupported dataset index schema.');
   }
 
   if (!Array.isArray(manifest.datasets)) {
-    throw new Error('Dataset index 缺少 datasets。');
+    throw new UserFacingError('DATASET_INDEX_ENTRIES_MISSING', 'The dataset index has no datasets.');
   }
 
   for (const dataset of manifest.datasets) {
     if (!dataset.id || !dataset.name || !dataset.manifestPath) {
-      throw new Error('Dataset index 存在缺少 id/name/manifestPath 的条目。');
+      throw new UserFacingError('DATASET_INDEX_ENTRY_INVALID', 'The dataset index has an entry missing id, name, or manifestPath.');
     }
-  }
-}
-
-function parseJsonResponseText(text: string, label: string) {
-  const normalized = text.replace(/^\uFEFF/, '').trim();
-  try {
-    return JSON.parse(normalized) as unknown;
-  } catch {
-    throw new Error(`无法解析 ${label} JSON，返回内容开头：${normalized.slice(0, 80)}`);
   }
 }

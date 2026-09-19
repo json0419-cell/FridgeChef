@@ -1,6 +1,7 @@
 import { Directory, File, FileMode } from 'expo-file-system';
 import type { FileHandle } from 'expo-file-system';
 import type { DatasetPackManifest, InstalledDataset, VectorSearchResult } from '../../types';
+import { UserFacingError } from '../../errors/user-facing-error';
 
 const DEFAULT_ROWS_PER_BATCH = 1024;
 
@@ -17,12 +18,12 @@ export class F32VectorStore {
     await this.ensureLoaded();
 
     if (!this.manifest || !this.vectorFile) {
-      throw new Error('向量库尚未加载。');
+      throw new UserFacingError('VECTOR_STORE_NOT_LOADED', 'The vector store is not loaded yet.');
     }
 
     const dimension = this.manifest.embedding.dimension;
     if (queryVector.length !== dimension) {
-      throw new Error(`Query vector 维度不匹配：${queryVector.length} != ${dimension}`);
+      throw new UserFacingError('VECTOR_QUERY_DIMENSION_MISMATCH', `Query vector dimension does not match: ${queryVector.length} != ${dimension}`, { actual: queryVector.length, expected: dimension });
     }
 
     const count = this.manifest.chunkCount;
@@ -60,7 +61,7 @@ export class F32VectorStore {
     this.vectorFile = findDatasetFile(root, this.manifest, 'vectors');
 
     if (this.manifest.embedding.dtype !== 'float32') {
-      throw new Error(`当前向量库 dtype=${this.manifest.embedding.dtype}，暂只支持 float32。`);
+      throw new UserFacingError('VECTOR_STORE_DTYPE_UNSUPPORTED', `This vector store uses dtype=${this.manifest.embedding.dtype}; only float32 is supported.`, { dtype: this.manifest.embedding.dtype });
     }
   }
 }
@@ -69,7 +70,7 @@ function readFloat32Chunk(handle: FileHandle, byteStart: number, byteLength: num
   handle.offset = byteStart;
   const bytes = handle.readBytes(byteLength);
   if (bytes.byteLength !== byteLength) {
-    throw new Error(`向量文件读取长度不匹配：${bytes.byteLength} != ${byteLength}`);
+    throw new UserFacingError('VECTOR_FILE_LENGTH_MISMATCH', `Vector file read length does not match: ${bytes.byteLength} != ${byteLength}`, { actual: bytes.byteLength, expected: byteLength });
   }
 
   return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / Float32Array.BYTES_PER_ELEMENT);
@@ -85,12 +86,12 @@ export async function getMetadataFileForDataset(dataset: InstalledDataset): Prom
 function findDatasetFile(root: Directory, manifest: DatasetPackManifest, role: string) {
   const entry = manifest.files.find((file) => file.role === role);
   if (!entry) {
-    throw new Error(`Dataset pack 缺少 ${role} 文件。`);
+    throw new UserFacingError('DATASET_PACK_FILE_MISSING', `The dataset pack has no ${role} file.`, { role });
   }
 
   const parts = entry.path.split('/').filter(Boolean);
   if (parts.length === 0) {
-    throw new Error(`Dataset ${role} 路径为空。`);
+    throw new UserFacingError('DATASET_PACK_FILE_PATH_EMPTY', `The dataset pack ${role} path is empty.`, { role });
   }
 
   let current = root;

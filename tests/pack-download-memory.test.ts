@@ -36,8 +36,9 @@ test('a resumed download asks only for the bytes that are still missing', () => 
 });
 
 test('a server that contradicts the manifest is not retried', () => {
-  assert.match(modelPack, /manifest 声明不一致/);
-  const predicate = /function isRetryableDownloadError[\s\S]*?\n}/.exec(modelPack);
-  assert.ok(predicate);
-  assert.match(predicate[0], /不支持安全的断点续传[\s\S]*manifest 声明不一致/);
+  assert.match(modelPack, /'MODEL_FILE_SIZE_MANIFEST_MISMATCH'/);
+  const finalCodes = /const FINAL_DOWNLOAD_ERROR_CODES = \[[\s\S]*?\] as const;/.exec(modelPack);
+  assert.ok(finalCodes, 'modelPack must list the codes it refuses to retry');
+  assert.match(finalCodes[0], /MODEL_FILE_RESUME_UNSUPPORTED[\s\S]*MODEL_FILE_SIZE_MANIFEST_MISMATCH/);
+  assert.match(modelPack, /hasUserFacingErrorCode\(error, FINAL_DOWNLOAD_ERROR_CODES\)/);
 });
