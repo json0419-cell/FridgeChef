@@ -11,9 +11,11 @@ import {
   assertSha256Matches,
   isChildUri,
   normalizePackRelativePath,
+  parsePackJsonResponseText,
   requiredAvailableBytes,
   resolveSecurePackFileUrl,
 } from '../downloads/pack-security';
+import { UserFacingError } from '../errors/user-facing-error';
 import {
   createInstalledDatasetFromManifest,
   listStoredInstalledDatasets,
@@ -89,18 +91,18 @@ export async function downloadDatasetPack(
         });
       } catch (error) {
         if (exceededDeclaredSize) {
-          throw new Error(`下载内容超过 manifest 声明大小：${file.path}`);
+          throw new UserFacingError('DATASET_FILE_EXCEEDS_DECLARED_SIZE', `Downloaded more bytes than the manifest declares for ${file.path}.`, { path: file.path });
         }
         throw error;
       }
 
       if (exceededDeclaredSize) {
-        throw new Error(`下载内容超过 manifest 声明大小：${file.path}`);
+        throw new UserFacingError('DATASET_FILE_EXCEEDS_DECLARED_SIZE', `Downloaded more bytes than the manifest declares for ${file.path}.`, { path: file.path });
       }
 
       const info = destination.info();
       if (info.size === undefined || info.size !== file.sizeBytes) {
-        throw new Error(`文件大小不匹配：${file.path}`);
+        throw new UserFacingError('DATASET_FILE_SIZE_MISMATCH', `File size does not match for ${file.path}.`, { path: file.path });
       }
 
       const actualSha256 = await calculateFileSha256(destination, info.size);
@@ -168,20 +170,20 @@ export async function fetchDatasetManifest(manifestUrl: string): Promise<Dataset
   const normalizedManifestUrl = assertHttpsUrl(manifestUrl, 'Dataset manifest URL').toString();
   const response = await fetch(normalizedManifestUrl);
   if (!response.ok) {
-    throw new Error(`无法下载 dataset manifest (${response.status})`);
+    throw new UserFacingError('DATASET_MANIFEST_DOWNLOAD_FAILED', `Could not download the dataset manifest (${response.status}).`, { status: response.status });
   }
 
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_MANIFEST_CHARACTERS) {
-    throw new Error('Dataset manifest 超过允许大小。');
+    throw new UserFacingError('DATASET_MANIFEST_TOO_LARGE', 'The dataset manifest is larger than allowed.');
   }
 
   const text = await response.text();
   if (text.length > MAX_MANIFEST_CHARACTERS) {
-    throw new Error('Dataset manifest 超过允许大小。');
+    throw new UserFacingError('DATASET_MANIFEST_TOO_LARGE', 'The dataset manifest is larger than allowed.');
   }
 
-  const manifest = parseJsonResponseText(text, 'dataset manifest');
+  const manifest = parsePackJsonResponseText(text, 'dataset manifest');
   validateDatasetManifest(manifest);
   return manifest;
 }
@@ -195,7 +197,7 @@ export async function uninstallDataset(dataset: InstalledDataset): Promise<void>
   const directory = new Directory(dataset.localRootUri);
 
   if (!isChildUri(root.uri, directory.uri)) {
-    throw new Error('拒绝删除非 datasets 目录下的文件。');
+    throw new UserFacingError('DATASET_DELETE_OUTSIDE_ROOT', 'Refused to delete a file outside the datasets directory.');
   }
 
   await removeInstalledArtifact({
@@ -228,7 +230,7 @@ function fileForRelativePath(root: Directory, relativePath: string) {
 
   const file = new File(current, parts[parts.length - 1]);
   if (!isChildUri(root.uri, file.uri)) {
-    throw new Error(`拒绝写入 Dataset 目录之外的路径：${relativePath}`);
+    throw new UserFacingError('DATASET_WRITE_OUTSIDE_ROOT', `Refused to write outside the dataset directory: ${relativePath}`, { path: relativePath });
   }
   return file;
 }
@@ -237,7 +239,7 @@ function assertSufficientDiskSpace(totalBytes: number) {
   const available = Paths.availableDiskSpace;
   const required = requiredAvailableBytes(totalBytes);
   if (Number.isFinite(available) && available > 0 && available < required) {
-    throw new Error(`存储空间不足：下载和校验至少需要 ${formatBytes(required)} 可用空间。`);
+    throw new UserFacingError('DATASET_STORAGE_INSUFFICIENT', `Not enough storage: downloading and verifying needs at least ${formatBytes(required)} free.`, { required: formatBytes(required) });
   }
 }
 
@@ -247,20 +249,12 @@ function removeDirectoryIfPresent(root: Directory, directory: Directory | null) 
   }
 
   if (!isChildUri(root.uri, directory.uri)) {
-    throw new Error('拒绝删除 datasets 目录之外的临时文件。');
+    throw new UserFacingError('DATASET_TEMP_DELETE_OUTSIDE_ROOT', 'Refused to delete a temporary file outside the datasets directory.');
   }
 
   directory.delete();
 }
 
-function parseJsonResponseText(text: string, label: string) {
-  const normalized = text.replace(/^\uFEFF/, '').trim();
-  try {
-    return JSON.parse(normalized) as unknown;
-  } catch {
-    throw new Error(`无法解析 ${label} JSON，返回内容开头：${normalized.slice(0, 80)}`);
-  }
-}
 
 function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');

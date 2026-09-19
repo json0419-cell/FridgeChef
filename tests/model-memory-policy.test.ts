@@ -5,6 +5,7 @@ import {
   parseAvailableMemoryBytes,
   requiredMemoryBytesForModelLoad,
 } from '../src/rag/model/model-memory-policy.ts';
+import { UserFacingError } from '../src/errors/user-facing-error.ts';
 
 const MEGABYTE = 1024 * 1024;
 const FLOAT32_PACK_BYTES = 724_923 + 2_266_820_608;
@@ -30,10 +31,14 @@ test('an unreadable or unexpected meminfo reports unknown rather than zero', () 
 // The bug: a 2.27GB float32 pack was accepted, then the low-memory killer took the whole process
 // during InferenceSession.create — a SIGKILL no catch block could observe, so the app just vanished.
 test('the float32 BGE-M3 pack is refused on a device that cannot hold it', () => {
-  assert.throws(
-    () => assertSufficientMemoryForModelLoad(FLOAT32_PACK_BYTES, 2_311_852 * 1024, 'BGE-M3'),
-    /可用内存不足/,
-  );
+  assert.throws(() => assertSufficientMemoryForModelLoad(FLOAT32_PACK_BYTES, 2_311_852 * 1024, 'BGE-M3'), (error: unknown) => {
+    assert.ok(error instanceof UserFacingError);
+    assert.equal(error.code, 'MODEL_MEMORY_INSUFFICIENT');
+    // The budget the user is told about has to name the model and both figures.
+    assert.equal(error.params.modelName, 'BGE-M3');
+    assert.ok(Number(error.params.requiredMegabytes) > Number(error.params.availableMegabytes));
+    return true;
+  });
 });
 
 test('the uint8 BGE-M3 pack loads on that same device', () => {
@@ -42,7 +47,11 @@ test('the uint8 BGE-M3 pack loads on that same device', () => {
 
 test('the required budget covers the weights plus room for the tokenizer and the app', () => {
   assert.ok(requiredMemoryBytesForModelLoad(UINT8_PACK_BYTES) > UINT8_PACK_BYTES + 300 * MEGABYTE);
-  assert.throws(() => requiredMemoryBytesForModelLoad(-1), /无效/);
+  assert.throws(() => requiredMemoryBytesForModelLoad(-1), (error: unknown) => {
+    assert.ok(error instanceof UserFacingError);
+    assert.equal(error.code, 'MODEL_SIZE_INVALID');
+    return true;
+  });
 });
 
 test('a device that does not report its memory is never locked out', () => {

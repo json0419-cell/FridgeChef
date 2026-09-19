@@ -3,6 +3,11 @@ import { NativeModules } from 'react-native';
 import { listInstalledDatasets } from '../datasets/datasetRegistry';
 import { listEnabledUserRecipesWithLibraries, type UserRecipeWithLibrary } from '../db/userRecipesRepository';
 import { getSettings } from '../storage/settingsStorage';
+import {
+  UserFacingError,
+  type UserFacingErrorCode,
+  type UserFacingErrorParams,
+} from '../errors/user-facing-error';
 import type {
   Ingredient,
   InstalledDataset,
@@ -28,7 +33,10 @@ export interface RagRecommendationResult {
 export interface RagUnavailableResult {
   mode: 'unavailable';
   reason: 'no_dataset' | 'no_model' | 'runtime_error';
+  /** English, for logs. The screen shows `errorCode` translated whenever one is present. */
   message: string;
+  errorCode?: UserFacingErrorCode;
+  errorParams?: UserFacingErrorParams;
 }
 
 export type RagResult = RagRecommendationResult | RagUnavailableResult;
@@ -85,7 +93,7 @@ async function runRagRecommendations(ingredients: Ingredient[], topK: number, ex
       return {
         mode: 'unavailable',
         reason: 'no_dataset',
-        message: '还没有启用的 RAG 菜谱库，请先在“菜谱库”下载官方库，或启用一个我的菜谱库。',
+        message: 'No recipe source is enabled for Local Retrieval.',
       };
     }
 
@@ -126,7 +134,8 @@ async function runRagRecommendations(ingredients: Ingredient[], topK: number, ex
     return {
       mode: 'unavailable',
       reason: 'runtime_error',
-      message: `RAG 运行失败：${formatError(error)}`,
+      message: `Local Retrieval failed: ${formatError(error)}`,
+      ...(error instanceof UserFacingError ? { errorCode: error.code, errorParams: error.params } : {}),
     };
   }
 }
@@ -849,7 +858,7 @@ function formatError(error: unknown) {
     return error;
   }
 
-  return '未知错误';
+  return 'Unknown error';
 }
 
 const STOP_WORDS = new Set([

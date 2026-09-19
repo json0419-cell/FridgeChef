@@ -3,6 +3,17 @@ import test from 'node:test';
 import { buildGeminiGenerateContentEndpoint, buildGeminiRequestHeaders } from '../src/ai/geminiConfig.ts';
 import { nextByteRange, parseContentRange, validateRangeResponse } from '../src/downloads/http-range.ts';
 import { validateEmbeddingModelManifest } from '../src/rag/model/model-manifest.ts';
+import { UserFacingError } from '../src/errors/user-facing-error.ts';
+
+/** Assertions name the stable code, never the prose: the prose is translated at the UI boundary. */
+function throwsCode(run: () => unknown, code: string) {
+  assert.throws(run, (error: unknown) => {
+    assert.ok(error instanceof UserFacingError, `expected a UserFacingError, got ${String(error)}`);
+    assert.equal(error.code, code);
+    assert.ok(error.message.length > 0);
+    return true;
+  });
+}
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -10,35 +21,38 @@ const HASH_B = 'b'.repeat(64);
 test('model manifest requires SHA-256 for every file before download', () => {
   const manifest = createModelManifest();
   assert.doesNotThrow(() => validateEmbeddingModelManifest(manifest));
-  assert.throws(
+  throwsCode(
     () => validateEmbeddingModelManifest({ ...manifest, files: [{ ...manifest.files[0], sha256: undefined }, manifest.files[1]] }),
-    /SHA-256/,
+    'PACK_FILE_SHA256_MISSING',
   );
 });
 
 test('model manifest rejects insecure URLs and unsafe output paths', () => {
   const manifest = createModelManifest();
-  assert.throws(
+  throwsCode(
     () => validateEmbeddingModelManifest({ ...manifest, files: [{ ...manifest.files[0], url: 'http://example.com/model.onnx' }, manifest.files[1]] }),
-    /HTTPS/,
+    'PACK_URL_NOT_SECURE',
   );
-  assert.throws(
+  throwsCode(
     () => validateEmbeddingModelManifest({ ...manifest, files: [{ ...manifest.files[0], path: '../model.onnx' }, manifest.files[1]] }),
-    /相对路径/,
+    'PACK_FILE_PATH_NOT_RELATIVE',
   );
 });
 
 test('range planner resumes at the exact existing byte offset', () => {
   assert.deepEqual(nextByteRange(16, 40, 16), { start: 16, end: 31 });
   assert.deepEqual(nextByteRange(32, 40, 16), { start: 32, end: 39 });
-  assert.throws(() => nextByteRange(40, 40, 16), /参数无效/);
+  throwsCode(() => nextByteRange(40, 40, 16), 'DOWNLOAD_RANGE_PARAMS_INVALID');
 });
 
 test('range response must match requested bytes and declared total', () => {
   assert.deepEqual(parseContentRange('bytes 16-31/40'), { start: 16, end: 31, total: 40 });
   assert.doesNotThrow(() => validateRangeResponse(206, 'bytes 16-31/40', { start: 16, end: 31 }, 40, 16));
-  assert.throws(() => validateRangeResponse(206, 'bytes 0-15/40', { start: 16, end: 31 }, 40, 16), /Content-Range/);
-  assert.throws(() => validateRangeResponse(200, null, { start: 16, end: 31 }, 40, 16), /断点续传/);
+  throwsCode(
+    () => validateRangeResponse(206, 'bytes 0-15/40', { start: 16, end: 31 }, 40, 16),
+    'DOWNLOAD_CONTENT_RANGE_INVALID',
+  );
+  throwsCode(() => validateRangeResponse(200, null, { start: 16, end: 31 }, 40, 16), 'DOWNLOAD_RESUME_UNSUPPORTED');
 });
 
 test('Gemini key is carried in a header and never in the endpoint URL', () => {

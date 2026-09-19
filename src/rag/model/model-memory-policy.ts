@@ -7,6 +7,8 @@
  * disappears. Refusing up front turns that silent disappearance into an error the user can read.
  */
 
+import { UserFacingError } from '../../errors/user-facing-error.ts';
+
 /** Measured on an x86_64 emulator: a 2.27GB float32 pack peaked at 1.6GB anonymous RSS. */
 const LOAD_FACTOR = 1.5;
 /** Tokenizer vocabulary, the JS heap, and the rest of the app still have to fit alongside the model. */
@@ -14,7 +16,7 @@ const HEADROOM_BYTES = 300 * 1024 * 1024;
 
 export function requiredMemoryBytesForModelLoad(modelBytes: number): number {
   if (!Number.isFinite(modelBytes) || modelBytes < 0) {
-    throw new Error('模型体积无效。');
+    throw new UserFacingError('MODEL_SIZE_INVALID', 'The model size is invalid.');
   }
   return Math.ceil(modelBytes * LOAD_FACTOR) + HEADROOM_BYTES;
 }
@@ -43,7 +45,7 @@ export function parseAvailableMemoryBytes(meminfoText: string): number | null {
 export function assertSufficientMemoryForModelLoad(
   modelBytes: number,
   availableBytes: number | null,
-  modelName = '本地模型',
+  modelName = 'the local model',
 ): void {
   if (availableBytes === null) {
     return;
@@ -54,9 +56,12 @@ export function assertSufficientMemoryForModelLoad(
     return;
   }
 
-  throw new Error(
-    `可用内存不足，无法加载${modelName}：需要约 ${toMegabytes(requiredBytes)}MB，当前可用 ${toMegabytes(availableBytes)}MB。` +
-      '请关闭其他应用后重试，或改用体积更小的模型。',
+  const requiredMegabytes = toMegabytes(requiredBytes);
+  const availableMegabytes = toMegabytes(availableBytes);
+  throw new UserFacingError(
+    'MODEL_MEMORY_INSUFFICIENT',
+    `Not enough memory to load ${modelName}: about ${requiredMegabytes}MB is needed, ${availableMegabytes}MB is available.`,
+    { modelName, requiredMegabytes, availableMegabytes },
   );
 }
 

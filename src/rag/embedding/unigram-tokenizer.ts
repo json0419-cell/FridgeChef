@@ -1,4 +1,5 @@
 import { PrecompiledCharsMap } from './precompiled-charsmap.ts';
+import { UserFacingError } from '../../errors/user-facing-error.ts';
 
 /**
  * BGE-M3（XLM-RoBERTa）的 SentencePiece Unigram tokenizer，纯 TypeScript 实现。
@@ -35,10 +36,10 @@ export class UnigramTokenizer {
   constructor(options: { vocabulary: UnigramVocabulary; charsMap: PrecompiledCharsMap; maxLength: number }) {
     const { charsMap, maxLength, vocabulary } = options;
     if (vocabulary.tokens.length !== vocabulary.scores.length) {
-      throw new Error('Tokenizer vocab 与 scores 数量不一致。');
+      throw new UserFacingError('TOKENIZER_VOCAB_SCORES_MISMATCH', 'The tokenizer vocab and scores counts do not match.');
     }
     if (!Number.isSafeInteger(maxLength) || maxLength < 3) {
-      throw new Error('Tokenizer maxLength 无效。');
+      throw new UserFacingError('TOKENIZER_MAX_LENGTH_INVALID', 'The tokenizer maxLength is invalid.');
     }
 
     this.charsMap = charsMap;
@@ -67,7 +68,7 @@ export class UnigramTokenizer {
     const bosId = this.tokenIds.get('<s>');
     const eosId = this.tokenIds.get('</s>');
     if (bosId === undefined || eosId === undefined || this.unkId < 0 || this.unkId >= vocabulary.tokens.length) {
-      throw new Error('Tokenizer vocab 缺少 <s>/</s>/<unk>。');
+      throw new UserFacingError('TOKENIZER_SPECIAL_TOKENS_MISSING', 'The tokenizer vocab is missing <s>, </s>, or <unk>.');
     }
     this.bosId = bosId;
     this.eosId = eosId;

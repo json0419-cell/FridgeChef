@@ -1,6 +1,7 @@
 import { FileMode, type File } from 'expo-file-system';
 import { sha256FileNative } from '../../modules/file-hash';
 import { calculateStreamingSha256 } from './streaming-sha256';
+import { UserFacingError } from '../errors/user-facing-error';
 
 /**
  * Hashes a pack file, preferring the platform digest.
@@ -23,8 +24,7 @@ export async function calculateFileSha256(
         return nativeDigest;
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`${message}（${file.name}）`);
+      throw withFileName(error, file.name);
     }
   }
 
@@ -33,9 +33,23 @@ export async function calculateFileSha256(
   try {
     return await calculateStreamingSha256(fileSize, (length) => handle.readBytes(length), { onProgress });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${message}（${file.name}）`);
+    throw withFileName(error, file.name);
   } finally {
     handle.close();
   }
+}
+
+/** Names the file that failed without losing the code the caller needs to localize the failure. */
+function withFileName(error: unknown, fileName: string) {
+  if (error instanceof UserFacingError) {
+    return new UserFacingError(error.code, `${error.message} (${fileName})`, { ...error.params, fileName }, {
+      cause: error,
+    });
+  }
+
+  const detail = error instanceof Error ? error.message : String(error);
+  return new UserFacingError('FILE_HASH_FAILED', `Could not verify the file ${fileName}: ${detail}`, {
+    fileName,
+    detail,
+  }, { cause: error });
 }

@@ -16,6 +16,7 @@ import {
   updateUserRecipeLibraryName,
 } from '../../../db/userRecipesRepository';
 import { useI18n } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import {
   getPersonalRecipeEmbeddingStatuses,
   rebuildPersonalRecipeEmbeddings,
@@ -591,7 +592,7 @@ function normalizeSearchText(value: string) {
 }
 
 function formatError(error: unknown, t: TFunction) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 const styles = StyleSheet.create({

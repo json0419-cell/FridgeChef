@@ -14,6 +14,7 @@ import { AppCard, AppTextInput, FieldLabel, SectionHeader } from '../../../share
 import { Button as ActionButton, IngredientChip } from '../../../shared/components/Foundation';
 import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { useI18n, type LanguagePreference } from '../../../i18n/i18n';
+import { localizeError } from '../../../i18n/error-messages';
 import { getSettings, hasApiKey, saveSettings } from '../../../storage/settingsStorage';
 import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { RecommendationDifficultyPreference, SettingsScreenProps } from '../../../types';
@@ -252,7 +253,7 @@ function parsePositiveNumber(value: string, fallback: number) {
 }
 
 function formatError(error: unknown, t: ReturnType<typeof useI18n>['t']) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('common.unknown');
+  return localizeError(error, t);
 }
 
 function createStyles(appColors: AppColorTokens) {

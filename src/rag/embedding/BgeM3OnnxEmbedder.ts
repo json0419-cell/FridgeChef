@@ -1,6 +1,7 @@
 import { Directory, File } from 'expo-file-system';
 import * as ort from 'onnxruntime-react-native';
 import type { EmbeddingModelPackManifest, InstalledEmbeddingModel } from '../../types';
+import { UserFacingError } from '../../errors/user-facing-error.ts';
 import { readAvailableMemoryBytes } from '../model/device-memory.ts';
 import { assertSufficientMemoryForModelLoad } from '../model/model-memory-policy.ts';
 import { loadUnigramTokenizerFromPack } from './tokenizer-pack.ts';
@@ -20,7 +21,7 @@ export class BgeM3OnnxEmbedder {
     await this.ensureLoaded();
 
     if (!this.tokenizer || !this.modelSession || !this.manifest) {
-      throw new Error('ONNX 模型尚未加载。');
+      throw new UserFacingError('EMBEDDING_MODEL_NOT_LOADED', 'The ONNX model is not loaded yet.');
     }
 
     const encoded = this.tokenizer.encode(text);
@@ -56,7 +57,7 @@ export class BgeM3OnnxEmbedder {
 
   private buildModelFeeds(inputIds: number[], attentionMask: number[]): Record<string, ort.Tensor> {
     if (!this.modelSession) {
-      throw new Error('ONNX 模型尚未加载。');
+      throw new UserFacingError('EMBEDDING_MODEL_NOT_LOADED', 'The ONNX model is not loaded yet.');
     }
 
     const dims = [1, inputIds.length];
@@ -73,7 +74,7 @@ export class BgeM3OnnxEmbedder {
           feeds[inputName] = new ort.Tensor('int64', new BigInt64Array(inputIds.length), dims);
           break;
         default:
-          throw new Error(`Tokenizer 无法提供模型输入：${inputName}`);
+          throw new UserFacingError('EMBEDDING_TOKENIZER_INPUT_MISSING', `The tokenizer cannot supply the model input ${inputName}.`, { inputName });
       }
     }
 
@@ -86,11 +87,11 @@ export class BgeM3OnnxEmbedder {
     const tensor = outputs[outputName] as ort.Tensor | undefined;
 
     if (!tensor) {
-      throw new Error('ONNX 模型没有返回 embedding output。');
+      throw new UserFacingError('EMBEDDING_OUTPUT_MISSING', 'The ONNX model returned no embedding output.');
     }
 
     if (!(tensor.data instanceof Float32Array)) {
-      throw new Error(`暂不支持 ${outputName} 的输出类型。`);
+      throw new UserFacingError('EMBEDDING_OUTPUT_TYPE_UNSUPPORTED', `The output type of ${outputName} is not supported.`, { outputName });
     }
 
     const dims = tensor.dims;
@@ -107,7 +108,7 @@ export class BgeM3OnnxEmbedder {
       return tensor.data.slice();
     }
 
-    throw new Error(`无法从 ${outputName} 输出形状 [${dims.join(', ')}] 解析 embedding。`);
+    throw new UserFacingError('EMBEDDING_OUTPUT_SHAPE_UNSUPPORTED', `Could not read an embedding from the ${outputName} output shape [${dims.join(', ')}].`, { outputName, dims: dims.join(', ') });
   }
 }
 
@@ -121,12 +122,12 @@ function weightBytes(manifest: EmbeddingModelPackManifest) {
 function findModelFile(root: Directory, manifest: EmbeddingModelPackManifest, role: string) {
   const entry = manifest.files.find((file) => file.role === role);
   if (!entry) {
-    throw new Error(`Model pack 缺少 ${role} 文件。`);
+    throw new UserFacingError('MODEL_PACK_FILE_MISSING', `The model pack has no ${role} file.`, { role });
   }
 
   const parts = entry.path.split('/').filter(Boolean);
   if (parts.length === 0) {
-    throw new Error(`Model pack ${role} 路径为空。`);
+    throw new UserFacingError('MODEL_PACK_FILE_PATH_EMPTY', `The model pack ${role} path is empty.`, { role });
   }
 
   let current = root;
