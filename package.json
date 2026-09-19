@@ -63,6 +63,13 @@
     "preset": "jest-expo",
     "testMatch": [
       "**/tests/**/*.jest.ts?(x)"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.claude/worktrees/"
+    ],
+    "modulePathIgnorePatterns": [
+      "/.claude/worktrees/"
     ]
   },
   "private": true
