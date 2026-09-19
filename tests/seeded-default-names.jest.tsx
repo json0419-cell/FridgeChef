@@ -2,12 +2,10 @@
 // now, however the row was written; a library the user named must read exactly as they typed it.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { UserRecipeLibrariesScreen } from '../src/features/recipes/screens/UserRecipeLibrariesScreen';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
+import { renderWithAppProviders } from './support/app-providers';
 import { listUserRecipeLibraries } from '../src/db/userRecipesRepository';
 import { SEEDED_DEFAULT_MARKER } from '../src/db/seeded-defaults';
 
@@ -42,16 +40,12 @@ const USER_NAMED_LIBRARY = {
 
 async function renderLibraries(language: 'en' | 'zh') {
   await AsyncStorage.setItem('chi_shen_me.language', language);
-  return render(
-    <I18nProvider>
-      <AppFeedbackProvider>
-        <NavigationContainer>
-          <Stack.Navigator>
-            <Stack.Screen name="UserRecipeLibraries" component={UserRecipeLibrariesScreen as never} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AppFeedbackProvider>
-    </I18nProvider>,
+  return renderWithAppProviders(
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="UserRecipeLibraries" component={UserRecipeLibrariesScreen as never} />
+      </Stack.Navigator>
+    </NavigationContainer>,
   );
 }
 
