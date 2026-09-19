@@ -14,6 +14,7 @@ import {
   listUserRecipes,
   updateUserRecipe,
 } from '../../../db/userRecipesRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { indexPersonalRecipeEmbedding } from '../../../rag/personalRagService';
 import { getApiKey } from '../../../storage/settingsStorage';
@@ -273,7 +274,7 @@ export function AddUserRecipeScreen({ navigation, route }: Props) {
                   style={[styles.choiceChip, library.id === libraryId && styles.choiceChipActive]}
                 >
                   <Text style={[styles.choiceChipText, library.id === libraryId && styles.choiceChipTextActive]}>
-                    {library.name}
+                    {resolveSeededDefault(library.name, t('userLibraries.defaultName'))}
                   </Text>
                 </Pressable>
               ))}

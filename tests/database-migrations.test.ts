@@ -12,6 +12,7 @@ import {
 } from '../src/db/database-diagnostics.ts';
 import { SqliteTestDatabase, USER_DATA_TABLES, type FailureInjector } from './support/sqlite-test-database.ts';
 import { SENTINEL_API_KEY } from './fixtures/sentinel-api-key.ts';
+import { SEEDED_DEFAULT_MARKER } from '../src/db/seeded-defaults.ts';
 
 const baseRecipes: BaseRecipe[] = [
   {
@@ -112,6 +113,85 @@ for (let version = 1; version <= DATABASE_SCHEMA_VERSION; version += 1) {
   });
 }
 
+test('the wording the app used to freeze into rows becomes the seeded-default marker', async (context) => {
+  const database = openFixture(2);
+  context.after(() => database.close());
+  database.exec(`
+    INSERT INTO user_recipe_libraries (id, name, enabled, createdAt, updatedAt) VALUES
+      ('legacy-default', '我的菜谱库', 1, '2026-09-03T08:00:00.000Z', '2026-09-03T08:00:00.000Z');
+    INSERT INTO user_recipes (
+      id, libraryId, title, description, mainIngredients, seasonings, steps, tags,
+      estimatedTimeMinutes, difficulty, sourceType, sourceUrl, createdAt, updatedAt, enabled
+    ) VALUES
+      ('legacy-recipe', 'legacy-default', '未命名菜谱', '', '[]', '[]', '[]', '[]',
+        NULL, 'unknown', 'manual', '', '2026-09-04T08:00:00.000Z', '2026-09-04T08:00:00.000Z', 1);
+    INSERT INTO cooked_history (id, recipeId, title, source, cookedAt) VALUES
+      ('legacy-history', 'legacy-recipe', '未命名菜谱', 'personal', '2026-09-05T19:00:00.000Z');
+  `);
+
+  await startupFor(database).initializeDatabase();
+
+  assert.equal(database.version(), DATABASE_SCHEMA_VERSION);
+  assert.deepEqual(
+    database.rows('user_recipe_libraries', ['id', 'name']),
+    [
+      { id: 'legacy-default', name: SEEDED_DEFAULT_MARKER },
+      { id: 'library-1', name: 'Fixture library' },
+      { id: 'library-2', name: 'Fixture disabled library' },
+    ],
+  );
+  assert.deepEqual(
+    database.rows('user_recipes', ['id', 'title']),
+    [
+      { id: 'legacy-recipe', title: SEEDED_DEFAULT_MARKER },
+      { id: 'recipe-1', title: 'Preserved recipe' },
+      { id: 'recipe-2', title: 'Disabled recipe' },
+    ],
+  );
+  assert.deepEqual(
+    database.rows('cooked_history', ['id', 'title']),
+    [
+      { id: 'history-1', title: 'Preserved recipe' },
+      { id: 'legacy-history', title: SEEDED_DEFAULT_MARKER },
+    ],
+  );
+});
+
+test('a library the user named keeps its name, and the migration runs only once', async (context) => {
+  const database = openFixture(2);
+  context.after(() => database.close());
+  // A user is free to type the same words the app once used; renaming after the upgrade must stick.
+  database.exec(`
+    INSERT INTO user_recipe_libraries (id, name, enabled, createdAt, updatedAt) VALUES
+      ('user-named', 'Weeknight dinners', 1, '2026-09-03T08:00:00.000Z', '2026-09-03T08:00:00.000Z');
+  `);
+
+  await startupFor(database).initializeDatabase();
+  database.exec(`UPDATE user_recipe_libraries SET name = '我的菜谱库' WHERE id = 'user-named';`);
+  await startupFor(database).initializeDatabase();
+
+  assert.deepEqual(
+    database.rows('user_recipe_libraries', ['id', 'name']).find((row) => row.id === 'user-named'),
+    { id: 'user-named', name: '我的菜谱库' },
+  );
+});
+
+test('ingredient units the user accepted are left as they were stored', async (context) => {
+  const database = openFixture(2);
+  context.after(() => database.close());
+  database.exec(`
+    INSERT INTO ingredients (id, name, quantity, unit, source, createdAt) VALUES
+      ('ingredient-chinese-unit', 'Fixture rice', 1, '份', 'manual', '2026-09-01T08:00:00.000Z');
+  `);
+
+  await startupFor(database).initializeDatabase();
+
+  assert.deepEqual(
+    database.rows('ingredients', ['id', 'unit']).find((row) => row.id === 'ingredient-chinese-unit'),
+    { id: 'ingredient-chinese-unit', unit: '份' },
+  );
+});
+
 test('a fresh database reaches the current schema with the Base Recipe Library seeded', async (context) => {
   const database = new SqliteTestDatabase();
   context.after(() => database.close());
@@ -172,7 +252,7 @@ test('an injected migration failure preserves the schema and every table from th
 });
 
 test('an injected failure mid-seed leaves the prior recipes and all user tables unchanged', async (context) => {
-  const database = openFixture(2, failOnRecipeInsert(2));
+  const database = openFixture(DATABASE_SCHEMA_VERSION, failOnRecipeInsert(2));
   context.after(() => database.close());
   const before = database.snapshot();
 
@@ -181,8 +261,8 @@ test('an injected failure mid-seed leaves the prior recipes and all user tables 
     (error) =>
       error instanceof DatabaseMigrationError &&
       error.code === 'DATABASE_SEEDING_FAILED' &&
-      error.fromVersion === 2 &&
-      error.toVersion === 2,
+      error.fromVersion === DATABASE_SCHEMA_VERSION &&
+      error.toVersion === DATABASE_SCHEMA_VERSION,
   );
 
   assert.deepEqual(database.snapshot(), before);
@@ -281,7 +361,7 @@ test('startup diagnostics expose only recovery metadata', () => {
     code: 'DATABASE_SEEDING_FAILED',
     occurredAt: '2026-09-10T12:00:00.000Z',
     fromVersion: 1,
-    targetVersion: 2,
+    targetVersion: DATABASE_SCHEMA_VERSION,
   });
 });
 

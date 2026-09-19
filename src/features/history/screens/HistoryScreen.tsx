@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Clock, SlidersHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteCookedHistory, listCookedHistory } from '../../../db/cookedHistoryRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
@@ -93,7 +94,9 @@ export function HistoryScreen({ navigation }: Props) {
           ) : (
             <View style={styles.historyRow}>
               <View style={styles.cardTitleBox}>
-                <Text style={styles.recipeTitle} numberOfLines={1}>{item.item.title}</Text>
+                <Text style={styles.recipeTitle} numberOfLines={1}>
+                  {resolveSeededDefault(item.item.title, t('common.untitledRecipe'))}
+                </Text>
                 <Text style={styles.meta}>
                   {formatTime(item.item.cookedAt, language)} · {sourceLabel(item.item.source, t)}
                 </Text>
@@ -108,7 +111,9 @@ export function HistoryScreen({ navigation }: Props) {
       <AppConfirmModal
         visible={pendingDeletion !== null}
         title={t('history.deleteTitle')}
-        message={t('history.deleteBody', { title: pendingDeletion?.title ?? '' })}
+        message={t('history.deleteBody', {
+          title: pendingDeletion ? resolveSeededDefault(pendingDeletion.title, t('common.untitledRecipe')) : '',
+        })}
         cancelLabel={t('common.cancel')}
         confirmLabel={t('common.delete')}
         toneLabel={t('common.confirmation')}

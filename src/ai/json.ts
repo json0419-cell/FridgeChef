@@ -57,7 +57,7 @@ function toRecognizedFoodItem(value: unknown): RecognizedFoodItem | null {
     name,
     category: toStringValue(record.category) || '未分类',
     estimatedQuantity: toNullableNumber(record.estimatedQuantity),
-    unit: toStringValue(record.unit) || '份',
+    unit: toStringValue(record.unit),
     confidence: clampConfidence(toNumber(record.confidence, 0)),
     notes: toStringValue(record.notes),
   };
