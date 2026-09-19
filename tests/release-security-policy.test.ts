@@ -225,3 +225,12 @@ test('privacy policy and in-app disclosure remain present', () => {
   assert.match(app, /PrivacyPolicyScreen/);
   assert.match(client, /assertAiDataConsent/);
 });
+
+test('the Android build stays 16 KB page compatible', () => {
+  // onnxruntime-extensions ships prebuilt 4 KB-aligned libortextensions.so, which Android 15's
+  // 16 KB page devices refuse to load. The query tokenizer runs in TypeScript instead.
+  const packageJson = JSON.parse(read('package.json')) as { onnxruntimeExtensionsEnabled?: string };
+
+  assert.equal(packageJson.onnxruntimeExtensionsEnabled, 'false');
+  assert.doesNotMatch(read('src/rag/embedding/BgeM3OnnxEmbedder.ts'), /tokenizerOnnx/);
+});

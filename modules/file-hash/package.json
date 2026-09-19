@@ -1,0 +1,7 @@
+{
+  "name": "file-hash",
+  "version": "1.0.0",
+  "description": "Platform SHA-256 for pack files, so hashing a multi-gigabyte model does not run in Hermes.",
+  "main": "index.ts",
+  "private": true
+}

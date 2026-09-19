@@ -70,7 +70,7 @@ function createModelManifest() {
     },
     files: [
       { role: 'modelOnnx', path: 'files/model.onnx', url: 'https://example.com/model.onnx', sizeBytes: 1024, sha256: HASH_A },
-      { role: 'tokenizerOnnx', path: 'files/tokenizer.onnx', sizeBytes: 512, sha256: HASH_B },
+      { role: 'tokenizerJson', path: 'files/tokenizer.json', sizeBytes: 512, sha256: HASH_B },
     ],
   };
 }

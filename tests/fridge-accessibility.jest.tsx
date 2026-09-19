@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { FridgeScreen } from '../src/features/ingredients/screens/FridgeScreen';
 import { I18nProvider } from '../src/i18n/i18n';
+import { AppFeedbackProvider } from '../src/shared/components';
 import { listIngredients } from '../src/db/ingredientsRepository';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -35,11 +36,13 @@ const TOMATO = {
 async function renderFridge() {
   const screen = await render(
     <I18nProvider>
-      <NavigationContainer>
-        <FridgeTabs.Navigator>
-          <FridgeTabs.Screen name="Fridge" component={FridgeScreen as never} />
-        </FridgeTabs.Navigator>
-      </NavigationContainer>
+      <AppFeedbackProvider>
+        <NavigationContainer>
+          <FridgeTabs.Navigator>
+            <FridgeTabs.Screen name="Fridge" component={FridgeScreen as never} />
+          </FridgeTabs.Navigator>
+        </NavigationContainer>
+      </AppFeedbackProvider>
     </I18nProvider>,
   );
   return screen;

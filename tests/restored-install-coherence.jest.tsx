@@ -4,6 +4,7 @@ import { DATASET_REGISTRY_KEY } from '../src/datasets/dataset-registry-store';
 import { DatasetLibraryScreen } from '../src/features/datasets/screens/DatasetLibraryScreen';
 import { loadRecommendationReadiness } from '../src/features/recommendations/recommendation-readiness';
 import { I18nProvider } from '../src/i18n/i18n';
+import { AppFeedbackProvider } from '../src/shared/components';
 import { EMBEDDING_MODEL_REGISTRY_KEY } from '../src/rag/model/model-registry-store';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -123,7 +124,9 @@ describe('an install restored without its model and pack files', () => {
 
     const screen = await render(
       <I18nProvider>
-        <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        <AppFeedbackProvider>
+          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        </AppFeedbackProvider>
       </I18nProvider>,
     );
 
@@ -145,7 +148,9 @@ describe('an install restored without its model and pack files', () => {
 
     const screen = await render(
       <I18nProvider>
-        <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        <AppFeedbackProvider>
+          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        </AppFeedbackProvider>
       </I18nProvider>,
     );
 

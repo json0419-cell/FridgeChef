@@ -26,12 +26,12 @@ export function validateEmbeddingModelManifest(manifest: unknown): asserts manif
     (model.dimension as number) <= 0 ||
     !Number.isSafeInteger(model.maxLength) ||
     (model.maxLength as number) <= 0 ||
-    model.inputMode !== 'string-tokenizer-onnx'
+    (model.inputMode !== 'string-tokenizer-onnx' && model.inputMode !== 'token-ids')
   ) {
     throw new Error('Model manifest 缺少可用的 ONNX query embedding 信息。');
   }
 
-  validatePackFiles(value.files, ['modelOnnx', 'tokenizerOnnx'], 'Model pack');
+  validatePackFiles(value.files, ['modelOnnx', 'tokenizerJson'], 'Model pack');
 }
 
 function isNonEmptyString(value: unknown): value is string {

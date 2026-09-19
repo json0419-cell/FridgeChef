@@ -258,3 +258,22 @@ class MemoryStore implements RegistryStore {
     this.values[key] = value;
   }
 }
+
+// A freshly downloaded DatasetPack is saved as active so the user does not have to enable it by
+// hand. The registry keeps a single active pack, so that save must retire the previous one.
+test('saving a newly downloaded dataset as active retires the previously active pack', async () => {
+  const datasetStore = new MemoryStore({
+    [DATASET_REGISTRY_KEY]: JSON.stringify([officialDataset, unverifiedDataset]),
+  });
+  const datasets = createDatasetRegistry(datasetStore);
+
+  await datasets.save({ ...unverifiedDataset, active: true });
+
+  assert.deepEqual(
+    (await datasets.list()).map((item) => [item.id, item.active]),
+    [
+      [officialDataset.id, false],
+      [unverifiedDataset.id, true],
+    ],
+  );
+});

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Apple, SlidersHorizontal } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIngredientInventory } from '../hooks/useIngredientInventory';
 import { useI18n } from '../../../i18n/i18n';
 import { Button } from '../../../shared/components';
+import { AppConfirmModal } from '../../../shared/components/AppConfirmModal';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { spacing, typography, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
 import type { FridgeStackScreenProps, Ingredient } from '../../../types';
 
@@ -17,6 +19,8 @@ export function FridgeScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(appColors), [appColors]);
   const tabBarHeight = useBottomTabBarHeight();
   const { ingredients, loading, loadError, deleteError, loadIngredients, deleteInventoryIngredient } = useIngredientInventory();
+  const { showFeedback } = useFeedback();
+  const [pendingDeletion, setPendingDeletion] = useState<Ingredient | null>(null);
 
   useEffect(() => {
     navigation.setOptions({
@@ -35,19 +39,20 @@ export function FridgeScreen({ navigation }: Props) {
   );
 
   const confirmDelete = (ingredient: Ingredient) => {
-    Alert.alert(t('home.deleteIngredientTitle'), t('home.deleteIngredientBody', { name: ingredient.name }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const message = await deleteInventoryIngredient(ingredient.id);
-          if (message) {
-            Alert.alert(t('fridge.deleteFailed'), message);
-          }
-        },
-      },
-    ]);
+    setPendingDeletion(ingredient);
+  };
+
+  const runDelete = async () => {
+    const ingredient = pendingDeletion;
+    setPendingDeletion(null);
+    if (!ingredient) {
+      return;
+    }
+
+    const message = await deleteInventoryIngredient(ingredient.id);
+    if (message) {
+      showFeedback({ tone: 'error', title: t('fridge.deleteFailed'), message });
+    }
   };
 
   return (
@@ -149,6 +154,17 @@ export function FridgeScreen({ navigation }: Props) {
             </View>
           </View>
         )}
+      />
+      <AppConfirmModal
+        visible={pendingDeletion !== null}
+        title={t('home.deleteIngredientTitle')}
+        message={t('home.deleteIngredientBody', { name: pendingDeletion?.name ?? '' })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.delete')}
+        toneLabel={t('common.confirmation')}
+        tone="danger"
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={() => void runDelete()}
       />
     </SafeAreaView>
   );

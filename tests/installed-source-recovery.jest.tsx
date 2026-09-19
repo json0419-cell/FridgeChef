@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { DatasetLibraryScreen } from '../src/features/datasets/screens/DatasetLibraryScreen';
 import { DATASET_REGISTRY_KEY } from '../src/datasets/dataset-registry-store';
 import { I18nProvider } from '../src/i18n/i18n';
+import { AppFeedbackProvider } from '../src/shared/components';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -48,7 +49,9 @@ describe('unreadable installed-source registry', () => {
 
     const screen = await render(
       <I18nProvider>
-        <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        <AppFeedbackProvider>
+          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
+        </AppFeedbackProvider>
       </I18nProvider>,
     );
 

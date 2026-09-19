@@ -100,6 +100,7 @@ test('compares SHA-256 values without case ambiguity', () => {
 test('streams SHA-256 without loading a whole file', async () => {
   const source = new TextEncoder().encode('abc');
   let offset = 0;
+  const hashedBytes: number[] = [];
   const digest = await calculateStreamingSha256(
     source.length,
     (length) => {
@@ -107,11 +108,12 @@ test('streams SHA-256 without loading a whole file', async () => {
       offset += chunk.length;
       return chunk;
     },
-    2,
-    1,
+    { chunkBytes: 2, yieldAfterChunks: 1, onProgress: (bytes) => hashedBytes.push(bytes) },
   );
 
   assert.equal(digest, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  // Verifying a multi-gigabyte model file must report a live byte count, not a single jump at the end.
+  assert.deepEqual(hashedBytes, [0, 2, 3]);
   await assert.rejects(() => calculateStreamingSha256(3, () => new Uint8Array()), /提前结束/);
 });
 

@@ -135,7 +135,11 @@ export async function downloadDatasetPack(
       stagingDirectory.uri,
       localManifestFile.uri,
       normalizedManifestUrl,
-      existingDataset?.active ?? false,
+      // A pack the user just chose to download is a pack they want to retrieve from, so a new one
+      // arrives enabled rather than as an inert download; the registry keeps a single active pack,
+      // so that replaces the previously active one. A record that already exists keeps its own
+      // state, which is what carries a restored record's enabled flag across a reinstall.
+      existingDataset?.active ?? true,
     );
     await saveInstalledDataset(installed);
 

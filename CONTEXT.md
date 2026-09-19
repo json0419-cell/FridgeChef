@@ -104,6 +104,10 @@ _Avoid_: Started dataset, downloaded dataset
 A data-only recipe pack installed from an arbitrary URL whose publisher identity is not trusted by the app, even when its declared files pass transport, path, size, and hash validation.
 _Avoid_: Official DatasetPack, unsafe executable
 
+**Installed Packs**:
+The on-device record of which Official DatasetPacks, Unverified DatasetPacks, and embedding model packs are installed, and which of them are enabled or active. The Base Recipe Library is never part of it, and an installed model pack is not a recipe source.
+_Avoid_: Installed sources, registry, download list
+
 **Personal Recipe Library**:
 A user-created and user-managed recipe collection stored only on the user's device.
 _Avoid_: Official recipe library, custom DatasetPack

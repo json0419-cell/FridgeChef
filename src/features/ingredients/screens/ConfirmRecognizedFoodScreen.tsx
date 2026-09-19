@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppCard, AppTextInput, Button, StatusBadge } from '../../../shared/components';
+import { useFeedback } from '../../../shared/components/AppFeedbackProvider';
 import { addIngredients } from '../../../db/ingredientsRepository';
 import { useI18n } from '../../../i18n/i18n';
 import { spacing, useAppTheme, type AppColorTokens } from '../../../shared/theme/theme';
@@ -22,6 +23,7 @@ interface EditableRecognizedItem {
 
 export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
   const { t } = useI18n();
+  const { showFeedback } = useFeedback();
   const { colors: appColors } = useAppTheme();
   const styles = useMemo(() => createStyles(appColors), [appColors]);
   const [items, setItems] = useState<EditableRecognizedItem[]>(
@@ -57,7 +59,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
 
       const quantity = parseConfirmedQuantity(item.quantity);
       if (quantity === null) {
-        Alert.alert(t('confirm.quantityInvalid'));
+        showFeedback({ tone: 'error', title: t('confirm.quantityInvalid') });
         return;
       }
 
@@ -70,7 +72,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
     }
 
     if (drafts.length === 0) {
-      Alert.alert(t('confirm.noItems'));
+      showFeedback({ tone: 'error', title: t('confirm.noItems') });
       return;
     }
 
@@ -84,7 +86,11 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
         }),
       );
     } catch (error) {
-      Alert.alert(t('confirm.addFailed'), error instanceof Error ? error.message : t('common.unknown'));
+      showFeedback({
+        tone: 'error',
+        title: t('confirm.addFailed'),
+        message: error instanceof Error ? error.message : t('common.unknown'),
+      });
     } finally {
       setSaving(false);
     }

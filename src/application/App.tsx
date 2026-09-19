@@ -7,6 +7,7 @@ import { createNativeStackNavigator, type NativeStackHeaderProps } from '@react-
 import { House, Refrigerator, Sparkles, UserRound } from 'lucide-react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppFeedbackProvider, Button } from '../shared/components';
+import { AiDataConsentPrompt } from '../privacy/AiDataConsentPrompt';
 import { initializeDatabase } from '../db/database';
 import { applyStartupValidationFixtures } from '../validation/startup-fixtures.ts';
 import {
@@ -67,6 +68,8 @@ export default function App() {
     <I18nProvider>
       <AppFeedbackProvider>
         <AppContent />
+        {/* Mounted once so `requestAiDataConsent` can prompt from outside the component tree. */}
+        <AiDataConsentPrompt />
       </AppFeedbackProvider>
     </I18nProvider>
   );
