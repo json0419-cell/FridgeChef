@@ -1,9 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render, type RenderResult } from '@testing-library/react-native';
+import { fireEvent, type RenderResult } from '@testing-library/react-native';
 import { DataManagementScreen } from '../src/features/settings/screens/data-management-screen';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
 import { DataCleanupAggregateError } from '../src/storage/data-cleanup-policy';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -90,13 +89,7 @@ describe('scoped data deletion', () => {
 });
 
 async function renderDataManagement(): Promise<RenderResult> {
-  const screen = await render(
-    <I18nProvider>
-      <AppFeedbackProvider>
-        <DataManagementScreen />
-      </AppFeedbackProvider>
-    </I18nProvider>,
-  );
+  const screen = await renderWithAppProviders(<DataManagementScreen />);
   await screen.findByText('Each action has an isolated scope. Only Clear All removes data from other categories.');
   return screen;
 }

@@ -1,9 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { DatasetLibraryScreen } from '../src/features/datasets/screens/DatasetLibraryScreen';
 import { DATASET_REGISTRY_KEY } from '../src/datasets/dataset-registry-store';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -47,12 +46,8 @@ describe('unreadable installed-source registry', () => {
     await AsyncStorage.setItem(DATASET_REGISTRY_KEY, corruptRegistry);
     const navigation = { navigate: jest.fn(), setOptions: jest.fn() };
 
-    const screen = await render(
-      <I18nProvider>
-        <AppFeedbackProvider>
-          <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />
-        </AppFeedbackProvider>
-      </I18nProvider>,
+    const screen = await renderWithAppProviders(
+      <DatasetLibraryScreen navigation={navigation as never} route={{ key: 'DatasetLibrary', name: 'DatasetLibrary' } as never} />,
     );
 
     expect(await screen.findByText('Installed libraries and models could not be read')).toBeTruthy();

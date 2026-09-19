@@ -1,13 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as ScreenCapture from 'expo-screen-capture';
 import { ApiKeySettingsScreen } from '../src/features/settings/screens/api-key-settings-screen';
 import { SettingsScreen } from '../src/features/settings/screens/SettingsScreen';
-import { I18nProvider } from '../src/i18n/i18n';
-import { AppFeedbackProvider } from '../src/shared/components';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -50,17 +49,13 @@ const Stack = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef();
 
 async function renderSettings() {
-  return render(
-    <I18nProvider>
-      <AppFeedbackProvider>
-        <NavigationContainer ref={navigationRef}>
-          <Stack.Navigator>
-            <Stack.Screen name="Settings" component={SettingsScreen as never} />
-            <Stack.Screen name="ApiKeySettings" component={ApiKeySettingsScreen as never} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AppFeedbackProvider>
-    </I18nProvider>,
+  return renderWithAppProviders(
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator>
+        <Stack.Screen name="Settings" component={SettingsScreen as never} />
+        <Stack.Screen name="ApiKeySettings" component={ApiKeySettingsScreen as never} />
+      </Stack.Navigator>
+    </NavigationContainer>,
   );
 }
 

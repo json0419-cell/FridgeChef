@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { AiDataConsentPrompt } from '../src/privacy/AiDataConsentPrompt';
 import { requestAiDataConsent } from '../src/privacy/request-ai-data-consent';
 import { hasAiDataConsent } from '../src/privacy/ai-data-consent';
-import { I18nProvider } from '../src/i18n/i18n';
+import { renderWithAppProviders } from './support/app-providers';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -11,11 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
 
 async function renderPrompt() {
-  return render(
-    <I18nProvider>
-      <AiDataConsentPrompt />
-    </I18nProvider>,
-  );
+  return renderWithAppProviders(<AiDataConsentPrompt />);
 }
 
 describe('AI data disclosure prompt', () => {
