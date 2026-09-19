@@ -1,4 +1,6 @@
-export const DATABASE_SCHEMA_VERSION = 2;
+import { LEGACY_SEEDED_DEFAULT_TEXT, SEEDED_DEFAULT_MARKER } from './seeded-defaults.ts';
+
+export const DATABASE_SCHEMA_VERSION = 3;
 
 export type DatabaseMigrationErrorCode =
   | 'DATABASE_SCHEMA_TOO_NEW'
@@ -47,6 +49,10 @@ const migrations: Migration[] = [
   {
     version: 2,
     migrate: addUserRecipeEnabledState,
+  },
+  {
+    version: 3,
+    migrate: replaceFrozenChineseDefaults,
   },
 ];
 
@@ -192,6 +198,28 @@ async function createInitialSchema(database: MigrationDatabase) {
 
     CREATE INDEX IF NOT EXISTS idx_cooked_history_recipeId_cookedAt
       ON cooked_history (recipeId, cookedAt DESC);
+  `);
+}
+
+// Rows written before the marker existed hold the Chinese wording the app itself chose, so an
+// English reader still sees Chinese. Only the exact strings the app wrote are replaced; anything
+// else in these columns is the user's own text and is left alone. Timestamps are untouched so
+// nothing reorders. Custom Ingredient units are deliberately not rewritten: '份' reaches the
+// database only after the user reviewed and accepted it on the confirmation screen, which makes
+// a stored unit user input rather than an app-chosen default.
+async function replaceFrozenChineseDefaults(database: MigrationDatabase) {
+  await database.execAsync(`
+    UPDATE user_recipe_libraries
+      SET name = '${SEEDED_DEFAULT_MARKER}'
+      WHERE name = '${LEGACY_SEEDED_DEFAULT_TEXT.userRecipeLibraryName}';
+
+    UPDATE user_recipes
+      SET title = '${SEEDED_DEFAULT_MARKER}'
+      WHERE title = '${LEGACY_SEEDED_DEFAULT_TEXT.recipeTitle}';
+
+    UPDATE cooked_history
+      SET title = '${SEEDED_DEFAULT_MARKER}'
+      WHERE title = '${LEGACY_SEEDED_DEFAULT_TEXT.recipeTitle}';
   `);
 }
 

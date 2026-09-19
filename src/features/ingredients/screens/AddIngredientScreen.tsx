@@ -161,13 +161,13 @@ export function AddIngredientScreen({ navigation, route }: Props) {
           ...existing,
           name: trimmedName,
           quantity: parsedQuantity,
-          unit: unit.trim() || t('common.defaultUnit'),
+          unit: unit.trim(),
         });
       } else {
         await addIngredient({
           name: trimmedName,
           quantity: parsedQuantity,
-          unit: unit.trim() || t('common.defaultUnit'),
+          unit: unit.trim(),
           source: 'manual',
         });
       }

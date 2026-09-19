@@ -31,7 +31,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       localId: `${index}_${item.name}`,
       name: item.name,
       quantity: item.estimatedQuantity === null ? '' : String(item.estimatedQuantity),
-      unit: item.unit || t('common.defaultUnit'),
+      unit: item.unit,
       category: item.category,
       confidence: item.confidence,
       notes: item.notes,
@@ -66,7 +66,7 @@ export function ConfirmRecognizedFoodScreen({ navigation, route }: Props) {
       drafts.push({
         name,
         quantity,
-        unit: item.unit.trim() || t('common.defaultUnit'),
+        unit: item.unit.trim(),
         source: 'photo' as const,
       });
     }

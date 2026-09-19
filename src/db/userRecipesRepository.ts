@@ -1,5 +1,6 @@
 import { getDatabase } from './database';
 import { createLocalId } from './ingredientsRepository';
+import { SEEDED_DEFAULT_MARKER } from './seeded-defaults';
 import type {
   Recipe,
   UserRecipe,
@@ -8,8 +9,6 @@ import type {
   UserRecipeLibrary,
   UserRecipeSourceType,
 } from '../types';
-
-const DEFAULT_LIBRARY_NAME = '我的菜谱库';
 
 interface UserRecipeLibraryRow {
   id: string;
@@ -54,7 +53,9 @@ export async function ensureDefaultUserRecipeLibrary(): Promise<UserRecipeLibrar
     return libraries[0];
   }
 
-  return createUserRecipeLibrary(DEFAULT_LIBRARY_NAME);
+  // The first library is named by the app, not the user, so it stores the marker and is
+  // localized wherever it is shown.
+  return createUserRecipeLibrary(SEEDED_DEFAULT_MARKER);
 }
 
 export async function listUserRecipeLibraries(): Promise<UserRecipeLibrary[]> {
@@ -81,7 +82,7 @@ export async function createUserRecipeLibrary(name: string): Promise<UserRecipeL
   const now = new Date().toISOString();
   const library: UserRecipeLibrary = {
     id: createLocalId('recipe_library'),
-    name: normalizeText(name) || DEFAULT_LIBRARY_NAME,
+    name: normalizeText(name),
     enabled: true,
     recipeCount: 0,
     createdAt: now,
@@ -354,7 +355,7 @@ async function touchUserRecipeLibrary(id: string) {
 function normalizeUserRecipeDraft(draft: UserRecipeDraft): UserRecipeDraft {
   return {
     libraryId: draft.libraryId,
-    title: normalizeText(draft.title) || '未命名菜谱',
+    title: normalizeText(draft.title),
     description: normalizeText(draft.description),
     mainIngredients: normalizeStringArray(draft.mainIngredients),
     seasonings: normalizeStringArray(draft.seasonings),

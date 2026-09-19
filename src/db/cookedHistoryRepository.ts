@@ -23,7 +23,7 @@ export async function markRecipeCooked(draft: CookedRecipeDraft): Promise<Cooked
   const item: CookedRecipeHistory = {
     id: createLocalId('cook'),
     recipeId: normalizeRecipeId(draft.recipeId),
-    title: draft.title.trim() || '未命名菜谱',
+    title: draft.title.trim(),
     source: draft.source,
     cookedAt: new Date().toISOString(),
   };

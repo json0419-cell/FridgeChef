@@ -12,6 +12,7 @@ import {
   listUserRecipes,
   setUserRecipeLibraryEnabled,
 } from '../../../db/userRecipesRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import type { RecipesStackScreenProps, UserRecipeLibrary } from '../../../types';
@@ -122,7 +123,7 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
           <AppCard style={styles.libraryCard}>
             <View style={styles.cardHeader}>
               <View style={styles.flex}>
-                <Text style={styles.libraryName}>{item.name}</Text>
+                <Text style={styles.libraryName}>{resolveSeededDefault(item.name, t('userLibraries.defaultName'))}</Text>
                 <Text style={styles.meta}>
                   {t('userLibraries.recipeCount', { count: item.recipeCount })} ·{' '}
                   {item.enabled ? t('userLibraries.enabledMeta') : t('userLibraries.disabledMeta')}
@@ -164,7 +165,7 @@ export function UserRecipeLibrariesScreen({ navigation }: Props) {
         visible={pendingDeletion !== null}
         title={t('userLibraries.deleteTitle')}
         message={t('userLibraries.deleteBody', {
-          name: pendingDeletion?.name ?? '',
+          name: pendingDeletion ? resolveSeededDefault(pendingDeletion.name, t('userLibraries.defaultName')) : '',
           count: pendingDeletion?.recipeCount ?? 0,
         })}
         cancelLabel={t('common.cancel')}

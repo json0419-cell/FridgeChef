@@ -6,6 +6,7 @@ import { fetchGeminiGenerateContent, readGeminiJsonResponse } from '../../../ai/
 import { extractGeminiText } from '../../../ai/json';
 import { getOfficialRecipeById } from '../../../db/recipesRepository';
 import { getUserRecipeById } from '../../../db/userRecipesRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { getApiKey, hasApiKey } from '../../../storage/settingsStorage';
@@ -39,7 +40,7 @@ const DETAIL_COLORS = {
 } as const;
 
 export function RecipeDetailScreen({ route }: Props) {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const copy = getRecipeDetailCopy(language);
   const [state, setState] = useState<RecipeDetailState>({ status: 'loading' });
   const [geminiReady, setGeminiReady] = useState(false);
@@ -161,7 +162,7 @@ export function RecipeDetailScreen({ route }: Props) {
     <SafeAreaView edges={['bottom']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.titleBlock}>
-          <Text style={styles.recipeTitle}>{recipe.title}</Text>
+          <Text style={styles.recipeTitle}>{resolveSeededDefault(recipe.title, t('common.untitledRecipe'))}</Text>
           {recipe.tags.length > 0 ? (
             <View style={styles.tags}>
               {recipe.tags.map((tag) => (

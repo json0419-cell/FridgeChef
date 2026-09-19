@@ -94,7 +94,7 @@ export function recognizedItemToIngredientDraft(item: RecognizedFoodItem): Ingre
   return {
     name: item.name,
     quantity: normalizeQuantity(item.estimatedQuantity ?? 1),
-    unit: item.unit || '份',
+    unit: item.unit.trim(),
     source: 'photo',
   };
 }

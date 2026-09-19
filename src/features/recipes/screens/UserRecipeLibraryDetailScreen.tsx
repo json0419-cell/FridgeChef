@@ -15,6 +15,7 @@ import {
   setUserRecipesEnabled,
   updateUserRecipeLibraryName,
 } from '../../../db/userRecipesRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import {
   getPersonalRecipeEmbeddingStatuses,
@@ -75,14 +76,16 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
       const nextEmbeddingStatuses = await getPersonalRecipeEmbeddingStatuses(nextRecipes);
       const nextRecipeIds = new Set(nextRecipes.map((recipe) => recipe.id));
       setLibrary(nextLibrary);
-      setRenameValue((current) => current || nextLibrary?.name || '');
+      // Prefilling the localized default lets a save turn it into a name the user chose, which is
+      // then kept verbatim in both languages.
+      setRenameValue((current) => current || (nextLibrary ? resolveSeededDefault(nextLibrary.name, t('userLibraries.defaultName')) : ''));
       setRecipes(nextRecipes);
       setEmbeddingStatuses(nextEmbeddingStatuses);
       setSelectedRecipeIds((current) => new Set(Array.from(current).filter((id) => nextRecipeIds.has(id))));
     } finally {
       setLoading(false);
     }
-  }, [libraryId]);
+  }, [libraryId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -129,7 +132,10 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
 
     setConfirmDialog({
       title: t('libraryDetail.deleteLibraryTitle'),
-      message: t('libraryDetail.deleteLibraryBody', { name: library.name, count: library.recipeCount }),
+      message: t('libraryDetail.deleteLibraryBody', {
+        name: resolveSeededDefault(library.name, t('userLibraries.defaultName')),
+        count: library.recipeCount,
+      }),
       onConfirm: async () => {
         await deleteUserRecipeLibrary(library.id);
         navigation.goBack();
@@ -140,7 +146,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
   const confirmDeleteRecipe = (recipe: UserRecipe) => {
     setConfirmDialog({
       title: t('libraryDetail.deleteRecipeTitle'),
-      message: t('libraryDetail.deleteRecipeBody', { title: recipe.title }),
+      message: t('libraryDetail.deleteRecipeBody', { title: resolveSeededDefault(recipe.title, t('common.untitledRecipe')) }),
       onConfirm: async () => {
         await deleteUserRecipe(recipe.id);
         await load();
@@ -286,7 +292,9 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.pageIntro}>
-              <Text style={styles.pageTitle}>{library?.name ?? t('libraryDetail.fallbackTitle')}</Text>
+              <Text style={styles.pageTitle}>
+                {library ? resolveSeededDefault(library.name, t('userLibraries.defaultName')) : t('libraryDetail.fallbackTitle')}
+              </Text>
               <Text style={styles.pageSubtitle}>{t('libraryDetail.subtitle', {
                 count: recipes.length,
                 status: library?.enabled ? t('userLibraries.enabledMeta') : t('userLibraries.disabledMeta'),
@@ -381,7 +389,7 @@ export function UserRecipeLibraryDetailScreen({ navigation, route }: Props) {
           <AppCard style={[styles.card, styles.recipeCard, !item.enabled && styles.recipeCardDisabled]}>
             <View style={styles.cardHeader}>
               <View style={styles.flex}>
-                <Text style={styles.recipeTitle}>{item.title}</Text>
+                <Text style={styles.recipeTitle}>{resolveSeededDefault(item.title, t('common.untitledRecipe'))}</Text>
                 <Text style={styles.meta}>
                   {t('libraryDetail.steps', { count: item.steps.length })} · {difficultyLabel(item.difficulty, t)}
                   {item.estimatedTimeMinutes ? ` · ${t('libraryDetail.minutes', { count: item.estimatedTimeMinutes })}` : ''}

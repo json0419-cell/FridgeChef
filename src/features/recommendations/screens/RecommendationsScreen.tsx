@@ -15,6 +15,7 @@ import {
   refineRagRecommendationsWithProvider,
 } from '../../../ai/recommendationRefiner';
 import { markRecipeCooked, normalizeRecipeId } from '../../../db/cookedHistoryRepository';
+import { resolveSeededDefault } from '../../../db/seeded-defaults';
 import { useI18n } from '../../../i18n/i18n';
 import { requestAiDataConsent } from '../../../privacy/request-ai-data-consent';
 import { downloadEmbeddingModelPack, type ModelDownloadProgress } from '../../../rag/model/modelPack';
@@ -963,7 +964,9 @@ export function RecommendationsScreen({ navigation, route }: Props) {
           >
             <View style={styles.cardHeader}>
               <View style={styles.recipeTitleBlock}>
-                <Text accessibilityRole="header" style={styles.recipeTitle}>{item.recommendation.title}</Text>
+                <Text accessibilityRole="header" style={styles.recipeTitle}>
+                  {resolveSeededDefault(item.recommendation.title, t('common.untitledRecipe'))}
+                </Text>
                 <Text style={styles.sourceLine}>{getRagSourceLabel(item.recommendation.source, t)}</Text>
               </View>
             </View>
@@ -1002,14 +1005,18 @@ export function RecommendationsScreen({ navigation, route }: Props) {
             {item.recommendation.notes ? <Text style={styles.notes}>{t('recommendations.notes', { notes: item.recommendation.notes })}</Text> : null}
             <View style={styles.cardFooter}>
               <ActionButton
-                accessibilityLabel={t('recommendations.markCookedFor', { title: item.recommendation.title })}
+                accessibilityLabel={t('recommendations.markCookedFor', {
+                  title: resolveSeededDefault(item.recommendation.title, t('common.untitledRecipe')),
+                })}
                 title={t('recommendations.markCooked')}
                 variant="secondary"
                 onPress={() => markCooked(item.recommendation.recipeId ?? item.recommendation.id, item.recommendation.title)}
                 style={styles.cardFooterButton}
               />
               <Pressable
-                accessibilityLabel={t('recommendations.replaceThisFor', { title: item.recommendation.title })}
+                accessibilityLabel={t('recommendations.replaceThisFor', {
+                  title: resolveSeededDefault(item.recommendation.title, t('common.untitledRecipe')),
+                })}
                 accessibilityRole="button"
                 style={styles.dismissButton}
                 onPress={() => dismissRecommendation(item.recommendation)}
@@ -1321,9 +1328,13 @@ function getRagSourceLabel(recommendation: RagRecommendation | undefined, t: TFu
     return t('recommendations.sourceOfficial');
   }
 
+  // Retrieval builds this label from the stored library name, so a library the app named carries
+  // the marker through the recommendation cache and is localized here, when it is finally read.
   const personalPrefix = '我的菜谱库：';
   if (label.startsWith(personalPrefix)) {
-    return t('recommendations.sourcePersonal', { name: label.slice(personalPrefix.length) });
+    return t('recommendations.sourcePersonal', {
+      name: resolveSeededDefault(label.slice(personalPrefix.length), t('userLibraries.defaultName')),
+    });
   }
 
   return label;
